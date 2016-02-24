@@ -1,6 +1,6 @@
 # wse-plugin-s3upload
 
-S3 Upload is a Wowza Streaming Engine module will automatically upload completed recordings to an Amazon S3 bucket. It uses the AWS Java SDK to complete the uploads.
+S3 Upload is a Wowza Streaming Engine module that will automatically upload completed recordings to an Amazon S3 bucket. It uses the AWS Java SDK to complete the uploads.
 
 ## Prerequisites
 
@@ -33,7 +33,7 @@ Root/Application | s3UploadDeletOriginalFiles | Boolean | false | Should S3 Uplo
 ## Usage
 
 When a recording is complete, a temporary file `[recording-name].upload` is created to track the recording and sort any data that may be needed to resume the upload later if it's interrupted. The AWS TransferManager is then used to complete the upload, splitting the upload into a Multipart Upload if required. When the upload is complete, the temporary file is deleted.
-When the Wowza application starts or restarts, S3 Upload will check to see if there are any existing uploads that need to be completed. Any single part uploads that didn't originally complete will be restarted from the beginning and any Multipart uploads will be resumed from the last complete part. If the module is set to not resume uploads, any incomplete Multipart uploads will be deleted from the S3 bucket
+When the Wowza application starts or restarts, S3 Upload will check to see if there are any existing uploads that need to be completed. Any single part uploads that didn't originally complete will be restarted from the beginning and any Multipart uploads will be resumed from the last complete part. If the module is set to not resume uploads, any incomplete Multipart uploads will be deleted from the S3 bucket.
 
 ## API Reference
 
@@ -41,8 +41,8 @@ When the Wowza application starts or restarts, S3 Upload will check to see if th
 
 ## Contact
 Wowza Media Systems, LLC
+
 Wowza Media Systems provides developers with a platform to create streaming applications and solutions. See [Wowza Developer Tools](https://www.wowza.com/resources/developers) to learn more about our APIs and SDK.
-(Note this web page is being re-done and will be landing page for all developer resources).
 
 ## License
 
