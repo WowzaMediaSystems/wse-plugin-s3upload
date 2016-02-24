@@ -6,17 +6,21 @@ S3 Upload is a Wowza Streaming Engine module will automatically upload completed
 
 S3 Upload requires the AWS Java SDK to provide the upload functionality.  Download the [AWS SDK for Java](http://aws.amazon.com/sdk-for-java/), unzip it and copy `lib/aws-java-sdk-xx.xx.xx.jar` to your Wowza Streaming Engine `[install-dir]/lib/ folder`. 
 
-## Installation
+##Installation
 
-1. Copy `wse-plugin-s3upload.jar` to your Wowza Streaming Engine `[install-dir]/lib/`
+Copy `wse-plugin-s3upload.jar` to your Wowza Streaming Engine `[install-dir]/lib/`
 
-2. Add the following Module Definition to your Application configuration. See [Configure modules](http://www.wowza.com/forums/content.php?625-How-to-get-started-as-a-Wowza-Streaming-Engine-Manager-administrator#configModules) for details.
+## Configuration
+
+Add the following Module Definition to your Application configuration. See [Configure modules](http://www.wowza.com/forums/content.php?625-How-to-get-started-as-a-Wowza-Streaming-Engine-Manager-administrator#configModules) for details.
 
 Name | Description | Fully Qualified Class Name
 -----|-------------|---------------------------
 ModuleS3Upload | Upload recordings to Amazon S3. | com.wowza.wms.plugin.s3upload.ModuleS3Upload
 
-3. Adjust the default settings by adding the following properties to your application. See [Configure properties](http://www.wowza.com/forums/content.php?625-How-to-get-started-as-a-Wowza-Streaming-Engine-Manager-administrator#configProperties) for details.
+## Properties
+
+Adjust the default settings by adding the following properties to your application. See [Configure properties](http://www.wowza.com/forums/content.php?625-How-to-get-started-as-a-Wowza-Streaming-Engine-Manager-administrator#configProperties) for details.
 
 Path | Name | Type | Value | Notes
 -----|------|------|-------|------
