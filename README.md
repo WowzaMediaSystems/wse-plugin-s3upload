@@ -6,7 +6,7 @@ S3 Upload is a Wowza Streaming Engine module will automatically upload completed
 
 S3 Upload requires the AWS Java SDK to provide the upload functionality.  Download the [AWS SDK for Java](http://aws.amazon.com/sdk-for-java/), unzip it and copy `lib/aws-java-sdk-xx.xx.xx.jar` to your Wowza Streaming Engine `[install-dir]/lib/ folder`. 
 
-##Installation
+## Installation
 
 Copy `wse-plugin-s3upload.jar` to your Wowza Streaming Engine `[install-dir]/lib/`
 
