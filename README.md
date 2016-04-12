@@ -37,6 +37,8 @@ When the Wowza Streaming Engine application starts or restarts, the module check
 
 [How to extend Wowza Streaming Engine using the Wowza IDE](https://www.wowza.com/forums/content.php?759-How-to-extend-Wowza-Streaming-Engine-using-the-Wowza-IDE)
 
+Wowza Media Systems™ provides developers with a platform to create streaming applications and solutions. See [Wowza Developer Tools](https://www.wowza.com/resources/developers) to learn more about our APIs and SDK.
+
 ## Contact
 [Wowza Media Systems, LLC](https://www.wowza.com/contact)
 
