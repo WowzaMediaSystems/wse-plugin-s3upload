@@ -23,7 +23,5 @@ To use the compiled version of this module, see [How to upload recorded media to
 ## Contact
 [Wowza Media Systems, LLC](https://www.wowza.com/contact)
 
-Wowza Media Systems provides developers with a platform to create streaming applications and solutions. See [Wowza Developer Tools](https://www.wowza.com/resources/developers) to learn more about our APIs and SDK.
-
 ## License
 This code is distributed under the [Wowza Public License](https://github.com/WowzaMediaSystems/wse-plugin-s3upload/blob/master/LICENSE.txt).
