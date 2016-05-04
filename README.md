@@ -4,7 +4,7 @@ The **ModuleS3Upload** module for [Wowza Streaming Engine™ media server softwa
 ## Prerequisites
 Wowza Streaming Engine 4.0.0 or later is required.
 
-The Amazon Web Services (AWS) SDK for Java is required to provide the upload functionality.
+The [Amazon Web Services (AWS) SDK for Java](http://aws.amazon.com/sdk-for-java/) is required to provide the upload functionality.
 
 ## Usage
 When a recording is finished, a temporary file named **[recording-name].upload** is created to track the recording and sort any data that may be needed to resume the file upload later if it's interrupted. AWS TransferManager uploads the recorded file, splitting it into a multipart upload if required. After the recorded file is uploaded, the temporary **[recording-name].upload** file is deleted.
