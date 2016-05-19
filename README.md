@@ -1,4 +1,4 @@
-# ModuleS3Upload
+# S3Upload
 The **ModuleS3Upload** module for [Wowza Streaming Engine™ media server software](https://www.wowza.com/products/streaming-engine) automatically uploads finished recordings to an Amazon S3 bucket. It uses the Amazon Web Services (AWS) SDK for Java to upload the recorded files.
 
 ## Prerequisites
@@ -18,7 +18,7 @@ When the Wowza Streaming Engine application starts or restarts, the module check
 
 Wowza Media Systems™ provides developers with a platform to create streaming applications and solutions. See [Wowza Developer Tools](https://www.wowza.com/resources/developers) to learn more about our APIs and SDK.
 
-To use the compiled version of this module, see [How to upload recorded media to an Amazon S3 bucket (ModuleS3Upload)](https://www.wowza.com/forums/content.php?813-How-to-upload-recorded-media-to-an-Amazon-S3-bucket-%28ModuleS3Upload%29).
+To use the compiled version of this module, see [How to upload recorded media to an Amazon S3 bucket (S3Upload)](https://www.wowza.com/forums/content.php?813-How-to-upload-recorded-media-to-an-Amazon-S3-bucket-%28ModuleS3Upload%29).
 
 ## Contact
 [Wowza Media Systems, LLC](https://www.wowza.com/contact)
