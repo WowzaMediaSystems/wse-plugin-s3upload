@@ -25,3 +25,5 @@ To use the compiled version of this module, see [How to upload recorded media to
 
 ## License
 This code is distributed under the [Wowza Public License](https://github.com/WowzaMediaSystems/wse-plugin-s3upload/blob/master/LICENSE.txt).
+
+![alt tag](http://wowzalogs.com/stats/githubimage.php?plugin=wse-plugin-s3upload)
