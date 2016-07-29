@@ -104,7 +104,7 @@ public class ModuleS3Upload extends ModuleBase
 					break;
 					
 				case TRANSFER_FAILED_EVENT:
-					logger.warn(MODULE_NAME + ".ProgerssListener [" + appInstance.getContextStr() + "/" + this.mediaName + "] transfer failed", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+					logger.warn(MODULE_NAME + ".ProgressListener [" + appInstance.getContextStr() + "/" + this.mediaName + "] transfer failed", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 					break;
 					
 				default:
