@@ -182,6 +182,8 @@ public class ModuleS3Upload extends ModuleBase
 		this.bucketName = props.getPropertyStr("s3UploadBucketName", this.bucketName);
 		this.resumeUploads = props.getPropertyBoolean("s3UploadResumeUploads", this.resumeUploads);
 		this.deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeletOriginalFiles", this.deleteOriginalFiles);
+		// fix typo in property name
+		this.deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeleteOriginalFiles", this.deleteOriginalFiles);
 		
 		if(StringUtils.isEmpty(accessKey) || StringUtils.isEmpty(secretKey))
 		{
