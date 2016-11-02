@@ -176,39 +176,59 @@ public class ModuleS3Upload extends ModuleBase
 		this.logger = WMSLoggerFactory.getLoggerObj(appInstance);
 		this.appInstance = appInstance;
 		
-		WMSProperties props = appInstance.getProperties();
-		this.accessKey = props.getPropertyStr("s3UploadAccessKey", this.accessKey);
-		this.secretKey = props.getPropertyStr("s3UploadSecretKey", this.secretKey);
-		this.bucketName = props.getPropertyStr("s3UploadBucketName", this.bucketName);
-		this.resumeUploads = props.getPropertyBoolean("s3UploadResumeUploads", this.resumeUploads);
-		this.deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeletOriginalFiles", this.deleteOriginalFiles);
-		
-		if(StringUtils.isEmpty(accessKey) || StringUtils.isEmpty(secretKey))
+		try
 		{
-			logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 credentials", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
-			return;
+			WMSProperties props = appInstance.getProperties();
+			this.accessKey = props.getPropertyStr("s3UploadAccessKey", this.accessKey);
+			this.secretKey = props.getPropertyStr("s3UploadSecretKey", this.secretKey);
+			this.bucketName = props.getPropertyStr("s3UploadBucketName", this.bucketName);
+			this.resumeUploads = props.getPropertyBoolean("s3UploadResumeUploads", this.resumeUploads);
+			this.deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeletOriginalFiles", this.deleteOriginalFiles);
+			// fix typo in property name
+			this.deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeleteOriginalFiles", this.deleteOriginalFiles);
+			
+			if(StringUtils.isEmpty(accessKey) || StringUtils.isEmpty(secretKey))
+			{
+				logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 credentials", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+				return;
+			}
+			
+			AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(this.accessKey, this.secretKey));
+			
+			if (StringUtils.isEmpty(bucketName) || !s3Client.doesBucketExist(bucketName))
+			{
+				logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 bucket: " + bucketName, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+				return;
+			}
+			
+			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] S3 Bucket Name: " + this.bucketName + ", Resume Uploads: " + this.resumeUploads + ", Delete Original Files: " + this.deleteOriginalFiles, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+			transferManager = new TransferManager(s3Client);
+			resumeUploads();
+			
+			appInstance.addMediaWriterListener(new WriteListener());
 		}
-		
-		AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(this.accessKey, this.secretKey));
-		
-		if (StringUtils.isEmpty(bucketName) || !s3Client.doesBucketExist(bucketName))
+		catch (Exception e)
 		{
-			logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 bucket: " + bucketName, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
-			return;
+			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] exception: " + e.getMessage(), e);
 		}
-		
-		logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] S3 Bucket Name: " + this.bucketName + ", Resume Uploads: " + this.resumeUploads + ", Delete Original Files: " + this.deleteOriginalFiles, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
-		transferManager = new TransferManager(s3Client);
-		resumeUploads();
-		
-		appInstance.addMediaWriterListener(new WriteListener());
+		catch (Throwable t)
+		{
+			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] throwable exception: " + t.getMessage(), t);
+		}
 	}
 
 	public void onAppStop(IApplicationInstance appInstance)
 	{
-		if(transferManager != null)
+		try
 		{
-			transferManager.shutdownNow();
+			if(transferManager != null)
+			{
+				transferManager.shutdownNow();
+			}
+		}
+		catch (Exception e)
+		{
+			logger.error(MODULE_NAME + ".onAppStop [" + appInstance.getContextStr() + "] exception: " + e.getMessage(), e);
 		}
 	}
 
