@@ -5,8 +5,11 @@ The **ModuleS3Upload** module for [Wowza Streaming Engine™ media server softwa
 Wowza Streaming Engine 4.0.0 or later is required.
 
 AWS SDK version 1.10.77 or earlier is required. As a minimum, the following packages are required.
+
 *[AWS Java SDK For Amazon S3](http://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-s3/1.10.77)
+
 *[AWS SDK For Java Core](http://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-core/1.10.77)
+
 *[AWS Java SDK For AWS KMS](http://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-kms/1.10.77) (it's not clear if this package is actually required. It's only referenced from AmazonS3EncryptionClient which isn't used in the S3 uploader)
 
 The version of [Apache httpclient](http://mvnrepository.com/artifact/org.apache.httpcomponents/httpclient) that ships with Wowza Streaming Engine isn't compatible with the later versions of the AWS SDK
