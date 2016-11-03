@@ -10,6 +10,7 @@ import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
 
 import com.amazonaws.auth.BasicAWSCredentials;
@@ -17,17 +18,20 @@ import com.amazonaws.event.ProgressEvent;
 import com.amazonaws.event.ProgressEventType;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
+import com.amazonaws.services.s3.model.Bucket;
 import com.amazonaws.services.s3.transfer.PersistableTransfer;
 import com.amazonaws.services.s3.transfer.PersistableUpload;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.Upload;
 import com.amazonaws.services.s3.transfer.internal.S3ProgressListener;
 import com.wowza.util.StringUtils;
-import com.wowza.wms.application.*;
+import com.wowza.wms.application.IApplicationInstance;
+import com.wowza.wms.application.WMSProperties;
 import com.wowza.wms.logging.WMSLogger;
 import com.wowza.wms.logging.WMSLoggerFactory;
 import com.wowza.wms.logging.WMSLoggerIDs;
-import com.wowza.wms.module.*;
+import com.wowza.wms.module.ModuleBase;
 import com.wowza.wms.stream.IMediaStream;
 import com.wowza.wms.stream.IMediaWriterActionNotify;
 
@@ -40,10 +44,10 @@ public class ModuleS3Upload extends ModuleBase
 		public void onWriteComplete(IMediaStream stream, File file)
 		{
 			String mediaName = file.getPath().replace(appInstance.getStreamStorageDir(), "");
-			if(mediaName.startsWith("/"))
+			if (mediaName.startsWith("/"))
 				mediaName = mediaName.substring(1);
 
-			if(transferManager == null)
+			if (transferManager == null)
 				return;
 			synchronized(lock)
 			{
@@ -71,11 +75,11 @@ public class ModuleS3Upload extends ModuleBase
 			// no-op
 		}
 	}
-	
+
 	private class ProgressListener implements S3ProgressListener
 	{
 		final String mediaName;
-		
+
 		ProgressListener(String mediaName)
 		{
 			this.mediaName = mediaName;
@@ -84,7 +88,7 @@ public class ModuleS3Upload extends ModuleBase
 		@Override
 		public void progressChanged(ProgressEvent progressEvent)
 		{
-			if(progressEvent.getEventType().isTransferEvent())
+			if (progressEvent.getEventType().isTransferEvent())
 			{
 				ProgressEventType type = progressEvent.getEventType();
 				System.out.println("progressChanged: " + type.toString());
@@ -96,17 +100,17 @@ public class ModuleS3Upload extends ModuleBase
 						File tmp = new File(appInstance.getStreamStorageDir(), mediaName + ".upload");
 						tmp.delete();
 					}
-					if(deleteOriginalFiles)
+					if (deleteOriginalFiles)
 					{
 						File file = new File(appInstance.getStreamStorageDir(), mediaName);
 						file.delete();
 					}
 					break;
-					
+
 				case TRANSFER_FAILED_EVENT:
-					logger.warn(MODULE_NAME + ".ProgerssListener [" + appInstance.getContextStr() + "/" + this.mediaName + "] transfer failed", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+					logger.warn(MODULE_NAME + ".ProgerssListener [" + appInstance.getContextStr() + "/" + mediaName + "] transfer failed", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 					break;
-					
+
 				default:
 					break;
 				}
@@ -117,7 +121,8 @@ public class ModuleS3Upload extends ModuleBase
 		public void onPersistableTransfer(final PersistableTransfer transfer)
 		{
 			System.out.println("onPersistableTransfer: " + transfer.serialize());
-			appInstance.getVHost().getThreadPool().execute(new Runnable() {
+			appInstance.getVHost().getThreadPool().execute(new Runnable()
+			{
 
 				@Override
 				public void run()
@@ -152,60 +157,82 @@ public class ModuleS3Upload extends ModuleBase
 				}
 			});
 		}
-		
+
 	}
-	
+
 	public static final String MODULE_NAME = "ModuleS3Upload";
 	public static final String PROP_NAME_PREFIX = "s3Upload";
-	
+
 	private WMSLogger logger = null;
 	private IApplicationInstance appInstance = null;
-	
+
 	private TransferManager transferManager = null;
 	private String accessKey = null;
 	private String secretKey = null;
 	private String bucketName = null;
-	
+	private String endpoint = null;
+
 	private boolean resumeUploads = true;
 	private boolean deleteOriginalFiles = false;
-	
+
 	private Object lock = new Object();
 
 	public void onAppStart(IApplicationInstance appInstance)
 	{
-		this.logger = WMSLoggerFactory.getLoggerObj(appInstance);
+		logger = WMSLoggerFactory.getLoggerObj(appInstance);
 		this.appInstance = appInstance;
-		
+
 		try
 		{
 			WMSProperties props = appInstance.getProperties();
-			this.accessKey = props.getPropertyStr("s3UploadAccessKey", this.accessKey);
-			this.secretKey = props.getPropertyStr("s3UploadSecretKey", this.secretKey);
-			this.bucketName = props.getPropertyStr("s3UploadBucketName", this.bucketName);
-			this.resumeUploads = props.getPropertyBoolean("s3UploadResumeUploads", this.resumeUploads);
-			this.deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeletOriginalFiles", this.deleteOriginalFiles);
+			accessKey = props.getPropertyStr("s3UploadAccessKey", accessKey);
+			secretKey = props.getPropertyStr("s3UploadSecretKey", secretKey);
+			bucketName = props.getPropertyStr("s3UploadBucketName", bucketName);
+			endpoint = props.getPropertyStr("s3UploadEndpoint", endpoint);
+			resumeUploads = props.getPropertyBoolean("s3UploadResumeUploads", resumeUploads);
+			deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeletOriginalFiles", deleteOriginalFiles);
 			// fix typo in property name
-			this.deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeleteOriginalFiles", this.deleteOriginalFiles);
-			
-			if(StringUtils.isEmpty(accessKey) || StringUtils.isEmpty(secretKey))
+			deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeleteOriginalFiles", deleteOriginalFiles);
+
+			if (StringUtils.isEmpty(accessKey) || StringUtils.isEmpty(secretKey))
 			{
 				logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 credentials", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 				return;
 			}
-			
-			AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(this.accessKey, this.secretKey));
-			
-			if (StringUtils.isEmpty(bucketName) || !s3Client.doesBucketExist(bucketName))
+
+			AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(accessKey, secretKey));
+
+			if (!StringUtils.isEmpty(endpoint))
+				s3Client.setEndpoint(endpoint);
+
+			if (!StringUtils.isEmpty(bucketName))
 			{
-				logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 bucket: " + bucketName, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
-				return;
+				boolean hasBucket = false;
+				List<Bucket> buckets = s3Client.listBuckets();
+				for (Bucket bucket : buckets)
+				{
+					if (bucket.getName().equals(bucketName))
+					{
+						hasBucket = true;
+						break;
+					}
+				}
+				if (!hasBucket)
+				{
+					logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 bucket: " + bucketName, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+					return;
+				}
 			}
-			
-			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] S3 Bucket Name: " + this.bucketName + ", Resume Uploads: " + this.resumeUploads + ", Delete Original Files: " + this.deleteOriginalFiles, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+
+			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] S3 Bucket Name: " + bucketName + ", Resume Uploads: " + resumeUploads + ", Delete Original Files: " + deleteOriginalFiles, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 			transferManager = new TransferManager(s3Client);
 			resumeUploads();
-			
+
 			appInstance.addMediaWriterListener(new WriteListener());
+		}
+		catch (AmazonS3Exception ase)
+		{
+			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] AmazonS3Exception: " + ase.getMessage());
 		}
 		catch (Exception e)
 		{
@@ -221,7 +248,7 @@ public class ModuleS3Upload extends ModuleBase
 	{
 		try
 		{
-			if(transferManager != null)
+			if (transferManager != null)
 			{
 				transferManager.shutdownNow();
 			}
@@ -234,14 +261,15 @@ public class ModuleS3Upload extends ModuleBase
 
 	private void resumeUploads()
 	{
-		if(!resumeUploads)
+		if (!resumeUploads)
 		{
 			transferManager.abortMultipartUploads(bucketName, new Date());
 			return;
 		}
-		
+
 		File storageDir = new File(appInstance.getStreamStorageDir());
-		File[] files = storageDir.listFiles(new FilenameFilter() {
+		File[] files = storageDir.listFiles(new FilenameFilter()
+		{
 
 			@Override
 			public boolean accept(File dir, String name)
@@ -249,22 +277,22 @@ public class ModuleS3Upload extends ModuleBase
 				return name.toLowerCase().endsWith(".upload");
 			}
 		});
-		
-		for(File file : files)
+
+		for (File file : files)
 		{
 			String mediaName = file.getPath().replace(storageDir.getPath(), "");
-			if(mediaName.startsWith("/"))
+			if (mediaName.startsWith("/"))
 				mediaName = mediaName.substring(1);
-			
+
 			mediaName = mediaName.substring(0, mediaName.indexOf(".upload"));
 			Upload upload = null;
 			FileInputStream fis = null;
 			try
 			{
-				if(file.length() == 0)
+				if (file.length() == 0)
 				{
 					File mediaFile = new File(storageDir, mediaName);
-					if(mediaFile.exists())
+					if (mediaFile.exists())
 					{
 						upload = transferManager.upload(bucketName, mediaName, mediaFile);
 					}
@@ -280,7 +308,7 @@ public class ModuleS3Upload extends ModuleBase
 					PersistableUpload persistableUpload = PersistableTransfer.deserializeFrom(fis);
 					upload = transferManager.resumeUpload(persistableUpload);
 				}
-				if(upload != null)
+				if (upload != null)
 					upload.addProgressListener(new ProgressListener(mediaName));
 			}
 			catch (Exception e)
@@ -289,7 +317,7 @@ public class ModuleS3Upload extends ModuleBase
 			}
 			finally
 			{
-				if(fis != null)
+				if (fis != null)
 				{
 					try
 					{
