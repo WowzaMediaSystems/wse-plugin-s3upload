@@ -18,8 +18,11 @@ import com.amazonaws.event.ProgressEvent;
 import com.amazonaws.event.ProgressEventType;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.AccessControlList;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.Bucket;
+import com.amazonaws.services.s3.model.GroupGrantee;
+import com.amazonaws.services.s3.model.Permission;
 import com.amazonaws.services.s3.transfer.PersistableTransfer;
 import com.amazonaws.services.s3.transfer.PersistableUpload;
 import com.amazonaws.services.s3.transfer.TransferManager;
@@ -65,7 +68,16 @@ public class ModuleS3Upload extends ModuleBase
 					}
 				}
 			}
-			Upload upload = transferManager.upload(bucketName, mediaName, file);
+
+			// In order to support setting ACL permissions for the file upload, we will wrap the upload properties in a PutObjectRequest
+			PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, mediaName, file);
+
+			// If the user has specified ACL properties, setup the putObjectRequest with the acl permissions generated
+			if (acl != null) {
+				putObjectRequest.withAccessControlList(acl);
+			}
+
+			Upload upload = transferManager.upload(putObjectRequest);
 			upload.addProgressListener(new ProgressListener(mediaName));
 		}
 
@@ -167,10 +179,13 @@ public class ModuleS3Upload extends ModuleBase
 	private IApplicationInstance appInstance = null;
 
 	private TransferManager transferManager = null;
+	private AccessControllList acl = null;
 	private String accessKey = null;
 	private String secretKey = null;
 	private String bucketName = null;
 	private String endpoint = null;
+	private String aclGroupGranteeUri = null;
+	private String aclPermissionRule = null;
 
 	private boolean resumeUploads = true;
 	private boolean deleteOriginalFiles = false;
@@ -193,6 +208,22 @@ public class ModuleS3Upload extends ModuleBase
 			deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeletOriginalFiles", deleteOriginalFiles);
 			// fix typo in property name
 			deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeleteOriginalFiles", deleteOriginalFiles);
+
+			// This value should be the URI representation of the "Group Grantee" found here http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html under "Amazon S3 Predefined Groups"
+			aclGroupGranteeUri = props.getPropertyBoolean("s3UploadACLGroupGranteeUri", aclGroupGranteeUri);
+			// This should be a string that represents the level of permissions we want to grant to the "Group Grantee" access to the file to be uploaded
+			aclPermissionRule = props.getPropertyBoolean("s3UploadACLPermissionRule", aclPermissionRule);
+
+			// With the passed property, check if it maps to a specified GroupGrantee
+			GroupGrantee grantee = GroupGrantee.parseGroupGrantee(aclGroupGranteeUri);
+			// In order for the parsing to work correctly, we will go ahead and force uppercase on the string passed
+			Permission permission = Permission.parsePermission(aclPermissionRule.toUpperCase());
+
+			// If we have properties for specifying permisions on the file upload, create the AccessControlList object and set the Grantee and Permissions
+			if (grantee != null && permission != null) {
+				acl = new AccessControlList();
+				acl.grantPermission(grantee, permission);
+			}
 
 			if (StringUtils.isEmpty(accessKey) || StringUtils.isEmpty(secretKey))
 			{
@@ -294,7 +325,15 @@ public class ModuleS3Upload extends ModuleBase
 					File mediaFile = new File(storageDir, mediaName);
 					if (mediaFile.exists())
 					{
-						upload = transferManager.upload(bucketName, mediaName, mediaFile);
+						// In order to support setting ACL permissions for the file upload, we will wrap the upload properties in a PutObjectRequest
+						PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, mediaName, file);
+
+						// If the user has specified ACL properties, setup the putObjectRequest with the acl permissions generated
+						if (acl != null) {
+							putObjectRequest.withAccessControlList(acl);
+						}
+
+						upload = transferManager.upload(putObjectRequest);
 					}
 					else
 					{
