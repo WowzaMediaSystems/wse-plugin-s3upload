@@ -23,6 +23,7 @@ import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.Bucket;
 import com.amazonaws.services.s3.model.GroupGrantee;
 import com.amazonaws.services.s3.model.Permission;
+import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.transfer.PersistableTransfer;
 import com.amazonaws.services.s3.transfer.PersistableUpload;
 import com.amazonaws.services.s3.transfer.TransferManager;
@@ -179,7 +180,7 @@ public class ModuleS3Upload extends ModuleBase
 	private IApplicationInstance appInstance = null;
 
 	private TransferManager transferManager = null;
-	private AccessControllList acl = null;
+	private AccessControlList acl = null;
 	private String accessKey = null;
 	private String secretKey = null;
 	private String bucketName = null;
@@ -210,9 +211,9 @@ public class ModuleS3Upload extends ModuleBase
 			deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeleteOriginalFiles", deleteOriginalFiles);
 
 			// This value should be the URI representation of the "Group Grantee" found here http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html under "Amazon S3 Predefined Groups"
-			aclGroupGranteeUri = props.getPropertyBoolean("s3UploadACLGroupGranteeUri", aclGroupGranteeUri);
+			aclGroupGranteeUri = props.getPropertyStr("s3UploadACLGroupGranteeUri", aclGroupGranteeUri);
 			// This should be a string that represents the level of permissions we want to grant to the "Group Grantee" access to the file to be uploaded
-			aclPermissionRule = props.getPropertyBoolean("s3UploadACLPermissionRule", aclPermissionRule);
+			aclPermissionRule = props.getPropertyStr("s3UploadACLPermissionRule", aclPermissionRule);
 
 			// With the passed property, check if it maps to a specified GroupGrantee
 			GroupGrantee grantee = GroupGrantee.parseGroupGrantee(aclGroupGranteeUri);
