@@ -327,7 +327,7 @@ public class ModuleS3Upload extends ModuleBase
 					if (mediaFile.exists())
 					{
 						// In order to support setting ACL permissions for the file upload, we will wrap the upload properties in a PutObjectRequest
-						PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, mediaName, file);
+						PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, mediaName, mediaFile);
 
 						// If the user has specified ACL properties, setup the putObjectRequest with the acl permissions generated
 						if (acl != null) {
