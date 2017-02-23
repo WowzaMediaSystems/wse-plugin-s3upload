@@ -92,6 +92,8 @@ public class ModuleS3Upload extends ModuleBase
 	private class ProgressListener implements S3ProgressListener
 	{
 		final String mediaName;
+		long lastTouch = -1;
+		long touchTimeout = appInstance.getApplicationInstanceTouchTimeout() / 2;
 
 		ProgressListener(String mediaName)
 		{
@@ -127,6 +129,14 @@ public class ModuleS3Upload extends ModuleBase
 				default:
 					break;
 				}
+			}
+			
+			// touch the appInstance so it doesn't timeout while we are still uploading.
+			long now = System.currentTimeMillis();
+			if(now - touchTimeout >= lastTouch)
+			{
+				appInstance.touch();
+				lastTouch = now;
 			}
 		}
 
@@ -181,12 +191,11 @@ public class ModuleS3Upload extends ModuleBase
 
 	private TransferManager transferManager = null;
 	private AccessControlList acl = null;
+
 	private String accessKey = null;
 	private String secretKey = null;
 	private String bucketName = null;
 	private String endpoint = null;
-	private String aclGroupGranteeUri = null;
-	private String aclPermissionRule = null;
 
 	private boolean resumeUploads = true;
 	private boolean deleteOriginalFiles = false;
@@ -211,14 +220,19 @@ public class ModuleS3Upload extends ModuleBase
 			deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeleteOriginalFiles", deleteOriginalFiles);
 
 			// This value should be the URI representation of the "Group Grantee" found here http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html under "Amazon S3 Predefined Groups"
-			aclGroupGranteeUri = props.getPropertyStr("s3UploadACLGroupGranteeUri", aclGroupGranteeUri);
+			String aclGroupGranteeUri = props.getPropertyStr("s3UploadACLGroupGranteeUri");
 			// This should be a string that represents the level of permissions we want to grant to the "Group Grantee" access to the file to be uploaded
-			aclPermissionRule = props.getPropertyStr("s3UploadACLPermissionRule", aclPermissionRule);
+			String aclPermissionRule = props.getPropertyStr("s3UploadACLPermissionRule");
+			
+			GroupGrantee grantee = null;
+			Permission permission = null;
 
 			// With the passed property, check if it maps to a specified GroupGrantee
-			GroupGrantee grantee = GroupGrantee.parseGroupGrantee(aclGroupGranteeUri);
-			// In order for the parsing to work correctly, we will go ahead and force uppercase on the string passed
-			Permission permission = Permission.parsePermission(aclPermissionRule.toUpperCase());
+			if(!StringUtils.isEmpty(aclGroupGranteeUri))
+				grantee = GroupGrantee.parseGroupGrantee(aclGroupGranteeUri);
+			// In order for the parsing to work correctly, we will go ahead and force uppercase on the string passed'
+			if(!StringUtils.isEmpty(aclPermissionRule))
+				permission = Permission.parsePermission(aclPermissionRule.toUpperCase());
 
 			// If we have properties for specifying permisions on the file upload, create the AccessControlList object and set the Grantee and Permissions
 			if (grantee != null && permission != null) {
@@ -282,7 +296,7 @@ public class ModuleS3Upload extends ModuleBase
 		{
 			if (transferManager != null)
 			{
-				transferManager.shutdownNow();
+				transferManager.shutdownNow(false);
 			}
 		}
 		catch (Exception e)
