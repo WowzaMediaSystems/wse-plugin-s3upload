@@ -48,7 +48,7 @@ public class ModuleS3Upload extends ModuleBase
 		public void onWriteComplete(IMediaStream stream, File file)
 		{
 			String mediaName = file.getPath().replace(appInstance.getStreamStorageDir(), "");
-			if (mediaName.startsWith("/"))
+			if (mediaName.startsWith(File.separator))
 				mediaName = mediaName.substring(1);
 
 			if (transferManager == null)
@@ -327,7 +327,7 @@ public class ModuleS3Upload extends ModuleBase
 		for (File file : files)
 		{
 			String mediaName = file.getPath().replace(storageDir.getPath(), "");
-			if (mediaName.startsWith("/"))
+			if (mediaName.startsWith(File.separator))
 				mediaName = mediaName.substring(1);
 
 			mediaName = mediaName.substring(0, mediaName.indexOf(".upload"));
