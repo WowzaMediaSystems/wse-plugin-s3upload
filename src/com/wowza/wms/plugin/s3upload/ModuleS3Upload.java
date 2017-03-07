@@ -5,13 +5,17 @@
 package com.wowza.wms.plugin.s3upload;
 
 import java.io.File;
+import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FilenameFilter;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.event.ProgressEvent;
@@ -41,45 +45,58 @@ import com.wowza.wms.stream.IMediaWriterActionNotify;
 
 public class ModuleS3Upload extends ModuleBase
 {
+	private class MyFilter implements FileFilter
+	{
+
+		private String suffix;
+
+		MyFilter(String suffix)
+		{
+			this.suffix = suffix;
+		}
+
+		@Override
+		public boolean accept(File pathname)
+		{
+			return pathname.isDirectory() || pathname.getName().toLowerCase().endsWith(suffix.toLowerCase());
+		}
+
+	}
+
 	private class WriteListener implements IMediaWriterActionNotify
 	{
 
 		@Override
 		public void onWriteComplete(IMediaStream stream, File file)
 		{
-			String mediaName = file.getPath().replace(appInstance.getStreamStorageDir(), "");
-			if (mediaName.startsWith(File.separator))
-				mediaName = mediaName.substring(1);
-
 			if (transferManager == null)
+			{
+				logger.error(MODULE_NAME + ".WriteListener.onWriteComplete Cannot upload file because S3 Transfoer Manager isn't loaded: [" + appInstance.getContextStr() + "/" + file.getName() + "]");
 				return;
+			}
+
+			boolean doUpload = false;
+			File uploadFile = null;
 			synchronized(lock)
 			{
-				File tmp = new File(file.getPath() + ".upload");
-				if (!tmp.exists())
+				uploadFile = new File(file.getPath() + ".upload");
+				if (!uploadFile.exists())
 				{
 					try
 					{
-						tmp.createNewFile();
+						uploadFile.createNewFile();
 					}
 					catch (IOException e)
 					{
-						// TODO Auto-generated catch block
-						e.printStackTrace();
+						logger.error(MODULE_NAME + ".WriteListener.onWriteComplete Cannot create .upload file: [" + appInstance.getContextStr() + "/" + file.getName() + "]", e);
 					}
 				}
+				if (uploadFile.exists() && !shuttingDown)
+					doUpload = true;
 			}
+			if (doUpload)
+				startUpload(uploadFile);
 
-			// In order to support setting ACL permissions for the file upload, we will wrap the upload properties in a PutObjectRequest
-			PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, mediaName, file);
-
-			// If the user has specified ACL properties, setup the putObjectRequest with the acl permissions generated
-			if (acl != null) {
-				putObjectRequest.withAccessControlList(acl);
-			}
-
-			Upload upload = transferManager.upload(putObjectRequest);
-			upload.addProgressListener(new ProgressListener(mediaName));
 		}
 
 		@Override
@@ -112,28 +129,57 @@ public class ModuleS3Upload extends ModuleBase
 				case TRANSFER_COMPLETED_EVENT:
 					synchronized(lock)
 					{
-						File tmp = new File(appInstance.getStreamStorageDir(), mediaName + ".upload");
-						tmp.delete();
+						File uploadFile = new File(storageDir, mediaName + ".upload");
+						uploadFile.delete();
 					}
 					if (deleteOriginalFiles)
 					{
-						File file = new File(appInstance.getStreamStorageDir(), mediaName);
-						file.delete();
+						File mediaFile = new File(appInstance.getStreamStorageDir(), mediaName);
+						mediaFile.delete();
 					}
 					break;
 
 				case TRANSFER_FAILED_EVENT:
 					logger.warn(MODULE_NAME + ".ProgerssListener [" + appInstance.getContextStr() + "/" + mediaName + "] transfer failed", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+					synchronized(lock)
+					{
+						if (shuttingDown)
+							break;
+					}
+
+					if (restartFailedUploads)
+					{
+						Timer t = new Timer();
+						t.schedule(new TimerTask()
+						{
+
+							@Override
+							public void run()
+							{
+								boolean doUpload = false;
+								File uploadFile = null;
+								synchronized(lock)
+								{
+									uploadFile = new File(storageDir, mediaName + ".upload");
+									if (uploadFile.exists() && !shuttingDown)
+										doUpload = true;
+								}
+
+								if (doUpload)
+									startUpload(uploadFile);
+							}
+						}, restartFailedUploadsTimeout);
+					}
 					break;
 
 				default:
 					break;
 				}
 			}
-			
+
 			// touch the appInstance so it doesn't timeout while we are still uploading.
 			long now = System.currentTimeMillis();
-			if(now - touchTimeout >= lastTouch)
+			if (now - touchTimeout >= lastTouch)
 			{
 				appInstance.touch();
 				lastTouch = now;
@@ -153,7 +199,7 @@ public class ModuleS3Upload extends ModuleBase
 					synchronized(lock)
 					{
 						FileOutputStream fos = null;
-						File tmp = new File(appInstance.getStreamStorageDir(), mediaName + ".upload");
+						File tmp = new File(storageDir, mediaName + ".upload");
 						try
 						{
 							if (!tmp.exists())
@@ -196,9 +242,14 @@ public class ModuleS3Upload extends ModuleBase
 	private String secretKey = null;
 	private String bucketName = null;
 	private String endpoint = null;
+	private File storageDir = null;
 
+	private boolean shuttingDown = false;
 	private boolean resumeUploads = true;
 	private boolean deleteOriginalFiles = false;
+	private boolean restartFailedUploads = true;
+
+	private long restartFailedUploadsTimeout = 60000l;
 
 	private Object lock = new Object();
 
@@ -206,6 +257,7 @@ public class ModuleS3Upload extends ModuleBase
 	{
 		logger = WMSLoggerFactory.getLoggerObj(appInstance);
 		this.appInstance = appInstance;
+		storageDir = new File(appInstance.getStreamStorageDir());
 
 		try
 		{
@@ -215,6 +267,8 @@ public class ModuleS3Upload extends ModuleBase
 			bucketName = props.getPropertyStr("s3UploadBucketName", bucketName);
 			endpoint = props.getPropertyStr("s3UploadEndpoint", endpoint);
 			resumeUploads = props.getPropertyBoolean("s3UploadResumeUploads", resumeUploads);
+			restartFailedUploads = props.getPropertyBoolean("s3UploadRestartFailedUploads", restartFailedUploads);
+			restartFailedUploadsTimeout = props.getPropertyLong("s3UploadRestartFailedUploadTimeout", restartFailedUploadsTimeout);
 			deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeletOriginalFiles", deleteOriginalFiles);
 			// fix typo in property name
 			deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeleteOriginalFiles", deleteOriginalFiles);
@@ -223,19 +277,20 @@ public class ModuleS3Upload extends ModuleBase
 			String aclGroupGranteeUri = props.getPropertyStr("s3UploadACLGroupGranteeUri");
 			// This should be a string that represents the level of permissions we want to grant to the "Group Grantee" access to the file to be uploaded
 			String aclPermissionRule = props.getPropertyStr("s3UploadACLPermissionRule");
-			
+
 			GroupGrantee grantee = null;
 			Permission permission = null;
 
 			// With the passed property, check if it maps to a specified GroupGrantee
-			if(!StringUtils.isEmpty(aclGroupGranteeUri))
+			if (!StringUtils.isEmpty(aclGroupGranteeUri))
 				grantee = GroupGrantee.parseGroupGrantee(aclGroupGranteeUri);
 			// In order for the parsing to work correctly, we will go ahead and force uppercase on the string passed'
-			if(!StringUtils.isEmpty(aclPermissionRule))
+			if (!StringUtils.isEmpty(aclPermissionRule))
 				permission = Permission.parsePermission(aclPermissionRule.toUpperCase());
 
 			// If we have properties for specifying permisions on the file upload, create the AccessControlList object and set the Grantee and Permissions
-			if (grantee != null && permission != null) {
+			if (grantee != null && permission != null)
+			{
 				acl = new AccessControlList();
 				acl.grantPermission(grantee, permission);
 			}
@@ -292,6 +347,11 @@ public class ModuleS3Upload extends ModuleBase
 
 	public void onAppStop(IApplicationInstance appInstance)
 	{
+		synchronized(lock)
+		{
+			shuttingDown = true;
+		}
+
 		try
 		{
 			if (transferManager != null)
@@ -307,35 +367,38 @@ public class ModuleS3Upload extends ModuleBase
 
 	private void resumeUploads()
 	{
-		if (!resumeUploads)
+		if (transferManager != null && !resumeUploads)
 		{
 			transferManager.abortMultipartUploads(bucketName, new Date());
 			return;
 		}
 
-		File storageDir = new File(appInstance.getStreamStorageDir());
-		File[] files = storageDir.listFiles(new FilenameFilter()
+		List<File> uploadFiles = getMatchingFiles(storageDir, ".upload");
+
+		for (File uploadFile : uploadFiles)
 		{
+			startUpload(uploadFile);
+		}
+	}
 
-			@Override
-			public boolean accept(File dir, String name)
-			{
-				return name.toLowerCase().endsWith(".upload");
-			}
-		});
+	private void startUpload(File uploadFile)
+	{
+		if (uploadFile == null || !uploadFile.exists())
+			return;
 
-		for (File file : files)
+		String mediaName = uploadFile.getPath().replace(storageDir.getPath(), "");
+		if (mediaName.startsWith(File.separator))
+			mediaName = mediaName.substring(File.separator.length());
+
+		mediaName = mediaName.substring(0, mediaName.indexOf(".upload"));
+
+		if (transferManager != null)
 		{
-			String mediaName = file.getPath().replace(storageDir.getPath(), "");
-			if (mediaName.startsWith(File.separator))
-				mediaName = mediaName.substring(1);
-
-			mediaName = mediaName.substring(0, mediaName.indexOf(".upload"));
 			Upload upload = null;
 			FileInputStream fis = null;
 			try
 			{
-				if (file.length() == 0)
+				if (uploadFile.length() == 0)
 				{
 					File mediaFile = new File(storageDir, mediaName);
 					if (mediaFile.exists())
@@ -344,7 +407,8 @@ public class ModuleS3Upload extends ModuleBase
 						PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, mediaName, mediaFile);
 
 						// If the user has specified ACL properties, setup the putObjectRequest with the acl permissions generated
-						if (acl != null) {
+						if (acl != null)
+						{
 							putObjectRequest.withAccessControlList(acl);
 						}
 
@@ -352,12 +416,12 @@ public class ModuleS3Upload extends ModuleBase
 					}
 					else
 					{
-						file.delete();
+						uploadFile.delete();
 					}
 				}
 				else
 				{
-					fis = new FileInputStream(file);
+					fis = new FileInputStream(uploadFile);
 					// Deserialize PersistableUpload information from disk.
 					PersistableUpload persistableUpload = PersistableTransfer.deserializeFrom(fis);
 					upload = transferManager.resumeUpload(persistableUpload);
@@ -367,7 +431,7 @@ public class ModuleS3Upload extends ModuleBase
 			}
 			catch (Exception e)
 			{
-				logger.error(MODULE_NAME + ".resumeUploads error resuming upload: [" + appInstance.getContextStr() + "/" + file.getName() + "]", e);
+				logger.error(MODULE_NAME + ".startUpload error starting or resuming upload: [" + appInstance.getContextStr() + "/" + uploadFile.getName() + "]", e);
 			}
 			finally
 			{
@@ -383,5 +447,28 @@ public class ModuleS3Upload extends ModuleBase
 				}
 			}
 		}
+		else
+		{
+			logger.error(MODULE_NAME + ".startUpload error starting or resuming upload: [" + appInstance.getContextStr() + "/" + uploadFile.getName() + "] Amazon S3 TransferManager not running.");
+		}
+	}
+
+	private List<File> getMatchingFiles(File dir, String suffix)
+	{
+		List<File> ret = new ArrayList<File>();
+
+		File[] files = dir.listFiles(new MyFilter(suffix));
+
+		for (File file : files)
+		{
+			if (file.isDirectory())
+				ret.addAll(getMatchingFiles(file, suffix));
+			else
+				ret.add(file);
+		}
+
+		Collections.sort(ret);
+
+		return ret;
 	}
 }
