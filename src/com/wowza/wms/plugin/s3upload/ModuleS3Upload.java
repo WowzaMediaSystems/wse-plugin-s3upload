@@ -242,6 +242,7 @@ public class ModuleS3Upload extends ModuleBase
 	private String secretKey = null;
 	private String bucketName = null;
 	private String endpoint = null;
+	private String filePrefix = null
 	private File storageDir = null;
 
 	private boolean shuttingDown = false;
@@ -266,6 +267,7 @@ public class ModuleS3Upload extends ModuleBase
 			secretKey = props.getPropertyStr("s3UploadSecretKey", secretKey);
 			bucketName = props.getPropertyStr("s3UploadBucketName", bucketName);
 			endpoint = props.getPropertyStr("s3UploadEndpoint", endpoint);
+			filePrefix = props.getPropertyStr("s3FilePrefix", filePrefix);
 			resumeUploads = props.getPropertyBoolean("s3UploadResumeUploads", resumeUploads);
 			restartFailedUploads = props.getPropertyBoolean("s3UploadRestartFailedUploads", restartFailedUploads);
 			restartFailedUploadsTimeout = props.getPropertyLong("s3UploadRestartFailedUploadTimeout", restartFailedUploadsTimeout);
@@ -391,6 +393,11 @@ public class ModuleS3Upload extends ModuleBase
 			mediaName = mediaName.substring(File.separator.length());
 
 		mediaName = mediaName.substring(0, mediaName.indexOf(".upload"));
+		
+		if(!StringUtils.isEmpty(filePrefix))
+		{
+			mediaName = filePrefix + (filePrefix.endsWith("/") ? "" : "/") +  mediaName;
+		}
 
 		if (transferManager != null)
 		{
