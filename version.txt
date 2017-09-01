@@ -1,0 +1,48 @@
+Build 47
+	* Added `s3UploadDelay` property to delay the start of an upload to allow for cases where a stream is re-published. Default value is 0
+	* Added `s3UploadFilePrefix` property to specify a path to upload the files to. Default not set
+	* Added `s3UploadVersionFile` property to control file versioning. When enabled, we will check to see if the file exists in the s3 bucket and add an incrementing version number to the new uploaded file as required. Default is false (don't version)
+	* Added `s3UploadDebugLog` property to enable extra debug logging
+
+Build 46
+	* Added method to restart failed uploads after a timeout without having to wait for an appInstance restart
+		* Added Boolean property `s3UploadRestartFailedUploads`. Default true
+		* Added Integer Property `s3UploadRestartFailedUploadTimeout`. Default 60000
+	* Streamlined upload initialisation so all uploads use a single method
+	* Fixed bug in file search so that subfolders are indexed correctly
+
+Build 45
+	* Fixed problem with extracting mediaName where leading separator chars were not being removed on Windows platforms
+
+Build 44
+	* Fixed module initialisation error caused by missing property values
+	* Changed method used to shutdown the transfer manager so that the S3Client isn't closed immediately which was throwing a socket exception if there are active transfers
+	* Added code to touch the appInstance while an upload is in progress so it doesn't automatically time out until the uploads are complete
+
+Build 43
+	* Fixed bug that was introduced in previous commit which prevented uploads from resuming after an application restart
+
+Build 42
+	* S3 ACL File permissions (#3)
+
+Build 37
+	* Added a property (s3UploadEndpoint) for setting the S3 endpoint that the bucket is in. Required for locations that only support V4 authentication and optional for other locations. Not required for the default location
+	* Changed bucket detection so we can make sure the user has permission to write to it
+	* Added better logging in onAppStart to detect problems with connecting to S3
+	* Updated README.md required packages list
+
+Build 34
+	* Add try/catch blocks to capture and log exceptions that are caused when an incorrect AWS package is used
+	* Updated README.md to add aws-java-sdk-kms to the list of AWS packages that are required
+
+Build 33
+	* Fixed typo in property name, 's3UploadDeleteOriginalFiles'
+
+Build 32
+	* Merge pull request #1 from gtd/patch-1
+
+Build 28
+	* Updated README to note specific version of AWS SDK files that are required
+
+Build 1
+	* Initial commit
