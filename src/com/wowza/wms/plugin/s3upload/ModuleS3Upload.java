@@ -340,7 +340,6 @@ public class ModuleS3Upload extends ModuleBase
 	private boolean shuttingDown = false;
 	private boolean resumeUploads = true;
 	private boolean versionFile = false;
-	private boolean useLegacyVersioning = false;
 	private boolean deleteOriginalFiles = false;
 	private boolean restartFailedUploads = true;
 
@@ -371,7 +370,6 @@ public class ModuleS3Upload extends ModuleBase
 			restartFailedUploads = props.getPropertyBoolean("s3UploadRestartFailedUploads", restartFailedUploads);
 			restartFailedUploadsTimeout = props.getPropertyLong("s3UploadRestartFailedUploadTimeout", restartFailedUploadsTimeout);
 			versionFile = props.getPropertyBoolean("s3UploadVersionFile", versionFile);
-			useLegacyVersioning = props.getPropertyBoolean("s3UploadUseLegacyVersioning", useLegacyVersioning);
 			deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeletOriginalFiles", deleteOriginalFiles);
 			// fix typo in property name
 			deleteOriginalFiles = props.getPropertyBoolean("s3UploadDeleteOriginalFiles", deleteOriginalFiles);
@@ -565,14 +563,14 @@ public class ModuleS3Upload extends ModuleBase
 
 					if (mediaFile.exists())
 					{
+						String uploadName = mediaName;
 						if (!StringUtils.isEmpty(filePrefix))
 						{
-							mediaName = filePrefix + (filePrefix.endsWith("/") ? "" : "/") + mediaName;
+							uploadName = filePrefix + (filePrefix.endsWith("/") ? "" : "/") + uploadName;
 						}
-						String uploadName = mediaName;
 						if (versionFile)
 						{
-							uploadName = getMediaNameVersion(mediaName);
+							uploadName = getMediaNameVersion(uploadName);
 						}
 						// In order to support setting ACL permissions for the file upload, we will wrap the upload properties in a PutObjectRequest
 						PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, uploadName, mediaFile);

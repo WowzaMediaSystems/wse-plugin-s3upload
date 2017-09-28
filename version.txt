@@ -1,3 +1,6 @@
+Build 48
+	* Fixed problem with deleting local files if a file prefix was set
+
 Build 47
 	* Added `s3UploadDelay` property to delay the start of an upload to allow for cases where a stream is re-published. Default value is 0
 	* Added `s3UploadFilePrefix` property to specify a path to upload the files to. Default not set
