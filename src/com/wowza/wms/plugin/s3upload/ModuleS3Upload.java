@@ -427,7 +427,7 @@ public class ModuleS3Upload extends ModuleBase
 				}
 			}
 
-			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #47]");
+			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #48]");
 			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] S3 Bucket Name: " + bucketName + ", Resume Uploads: " + resumeUploads + ", Delete Original Files: " + deleteOriginalFiles + ", Version Files: " + versionFile + ", Upload Delay: " + uploadDelay,
 					WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 			transferManager = new TransferManager(s3Client);
