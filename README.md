@@ -2,9 +2,11 @@
 The **ModuleS3Upload** module for [Wowza Streaming Engine™ media server software](https://www.wowza.com/products/streaming-engine) automatically uploads finished recordings to an Amazon S3 bucket. It uses the Amazon Web Services (AWS) SDK for Java to upload the recorded files.
 
 ## Prerequisites
-Wowza Streaming Engine 4.0.0 or later is required.
+Wowza Streaming Engine 4.7.2.02 or later is recommended. For earlier versions see note below regarding AWS SDK version.
 
-AWS SDK version 1.10.77 or earlier is required. As a minimum, the following packages are required.
+[AWS SDK for Java](https://aws.amazon.com/sdk-for-java/)
+
+**Note:** For earlier versions of Wowza Streaming Engine™, AWS SDK version 1.10.77 or earlier is required. As a minimum, the following packages are required.
 
 -[AWS Java SDK For Amazon S3](http://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-s3/1.10.77)
 
