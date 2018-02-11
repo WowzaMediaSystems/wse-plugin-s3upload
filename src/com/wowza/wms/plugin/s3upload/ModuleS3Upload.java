@@ -19,25 +19,25 @@ import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 
-import com.amazonaws.AmazonClientException;
-import com.amazonaws.AmazonServiceException;
+import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.auth.InstanceProfileCredentialsProvider;
 import com.amazonaws.event.ProgressEvent;
 import com.amazonaws.event.ProgressEventType;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.AccessControlList;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.Bucket;
-import com.amazonaws.services.s3.model.CopyObjectRequest;
+import com.amazonaws.services.s3.model.Grant;
 import com.amazonaws.services.s3.model.GroupGrantee;
 import com.amazonaws.services.s3.model.Permission;
 import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.s3.transfer.Copy;
 import com.amazonaws.services.s3.transfer.PersistableTransfer;
 import com.amazonaws.services.s3.transfer.PersistableUpload;
-import com.amazonaws.services.s3.transfer.Transfer.TransferState;
 import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
 import com.amazonaws.services.s3.transfer.internal.S3ProgressListener;
 import com.wowza.util.StringUtils;
@@ -333,6 +333,7 @@ public class ModuleS3Upload extends ModuleBase
 	private String bucketName = null;
 	private String filePrefix = null;
 	private String endpoint = null;
+	private String region = "us-east-1";
 	private File storageDir = null;
 	private Map<String, Timer> uploadTimers = new HashMap<String, Timer>();
 
@@ -364,7 +365,12 @@ public class ModuleS3Upload extends ModuleBase
 			secretKey = props.getPropertyStr("s3UploadSecretKey", secretKey);
 			bucketName = props.getPropertyStr("s3UploadBucketName", bucketName);
 			filePrefix = props.getPropertyStr("s3UploadFilePrefix", filePrefix);
-			endpoint = props.getPropertyStr("s3UploadEndpoint", endpoint);
+			
+			// prefer to set region rather than endpoint
+			region = props.getPropertyStr("s3UploadRegion", region);
+			if(StringUtils.isEmpty(region))
+				endpoint = props.getPropertyStr("s3UploadEndpoint", endpoint);
+			
 			debugLog = props.getPropertyBoolean("s3UploadDebugLog", debugLog);
 			resumeUploads = props.getPropertyBoolean("s3UploadResumeUploads", resumeUploads);
 			restartFailedUploads = props.getPropertyBoolean("s3UploadRestartFailedUploads", restartFailedUploads);
@@ -397,28 +403,48 @@ public class ModuleS3Upload extends ModuleBase
 				acl.grantPermission(grantee, permission);
 			}
 
+			AWSCredentialsProvider credentialsProvider = null;
+
 			if (StringUtils.isEmpty(accessKey) || StringUtils.isEmpty(secretKey))
 			{
-				logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 credentials", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
-				return;
+				// assume we are running on ec2 and have a iam role set.
+				credentialsProvider = new InstanceProfileCredentialsProvider(false);
+				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 Credentials. Using iam role", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+//				return;
+			}
+			else
+			{
+				credentialsProvider = new AWSStaticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey));
+				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using supplied S3 credentials", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 			}
 
-			AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(accessKey, secretKey));
+//			AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(accessKey, secretKey));
+			AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard().withCredentials(credentialsProvider);
 
-			if (!StringUtils.isEmpty(endpoint))
+			if (!StringUtils.isEmpty(region))
+				builder.withRegion(region);
+
+			AmazonS3 s3Client = builder.build();
+
+			if (!StringUtils.isEmpty(endpoint) && StringUtils.isEmpty(region))
 				s3Client.setEndpoint(endpoint);
 
 			if (!StringUtils.isEmpty(bucketName))
 			{
 				boolean hasBucket = false;
-				List<Bucket> buckets = s3Client.listBuckets();
-				for (Bucket bucket : buckets)
+//				List<Bucket> buckets = s3Client.listBuckets();
+//				for (Bucket bucket : buckets)
+//				{
+//					if (bucket.getName().equals(bucketName))
+//					{
+//						hasBucket = true;
+//						break;
+//					}
+//				}
+				String location = s3Client.getBucketLocation(bucketName);
+				if(s3Client.getRegionName().equals(location))
 				{
-					if (bucket.getName().equals(bucketName))
-					{
-						hasBucket = true;
-						break;
-					}
+					hasBucket = true;
 				}
 				if (!hasBucket)
 				{
@@ -430,7 +456,7 @@ public class ModuleS3Upload extends ModuleBase
 			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #48]");
 			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] S3 Bucket Name: " + bucketName + ", Resume Uploads: " + resumeUploads + ", Delete Original Files: " + deleteOriginalFiles + ", Version Files: " + versionFile + ", Upload Delay: " + uploadDelay,
 					WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
-			transferManager = new TransferManager(s3Client);
+			transferManager = TransferManagerBuilder.standard().withS3Client(s3Client).build();
 
 			appInstance.getVHost().getThreadPool().execute(new Runnable()
 			{
