@@ -29,8 +29,6 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.AccessControlList;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.Bucket;
-import com.amazonaws.services.s3.model.Grant;
 import com.amazonaws.services.s3.model.GroupGrantee;
 import com.amazonaws.services.s3.model.Permission;
 import com.amazonaws.services.s3.model.PutObjectRequest;
@@ -39,7 +37,7 @@ import com.amazonaws.services.s3.transfer.PersistableUpload;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
-import com.amazonaws.services.s3.transfer.internal.S3ProgressListener;
+import com.amazonaws.services.s3.transfer.internal.S3SyncProgressListener;
 import com.wowza.util.StringUtils;
 import com.wowza.wms.application.IApplicationInstance;
 import com.wowza.wms.application.WMSProperties;
@@ -206,7 +204,7 @@ public class ModuleS3Upload extends ModuleBase
 		}
 	}
 
-	private class ProgressListener implements S3ProgressListener
+	private class ProgressListener extends S3SyncProgressListener
 	{
 		final String mediaName;
 
@@ -233,7 +231,7 @@ public class ModuleS3Upload extends ModuleBase
 					}
 					if (deleteOriginalFiles)
 					{
-						File mediaFile = new File(appInstance.getStreamStorageDir(), mediaName);
+						File mediaFile = new File(storageDir, mediaName);
 						mediaFile.delete();
 					}
 					break;
@@ -355,12 +353,13 @@ public class ModuleS3Upload extends ModuleBase
 	{
 		this.appInstance = appInstance;
 		logger = WMSLoggerFactory.getLoggerObj(appInstance);
-		storageDir = new File(appInstance.getStreamStorageDir());
 		touchTimeout = appInstance.getApplicationInstanceTouchTimeout() / 2;
 
 		try
 		{
 			WMSProperties props = appInstance.getProperties();
+			String storageDirStr = appInstance.getStreamRecorderProperties().getPropertyStr("streamRecorderOutputPath", appInstance.getStreamStorageDir());
+			storageDir = new File(storageDirStr);
 			accessKey = props.getPropertyStr("s3UploadAccessKey", accessKey);
 			secretKey = props.getPropertyStr("s3UploadSecretKey", secretKey);
 			bucketName = props.getPropertyStr("s3UploadBucketName", bucketName);
@@ -453,8 +452,8 @@ public class ModuleS3Upload extends ModuleBase
 				}
 			}
 
-			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #48]");
-			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] S3 Bucket Name: " + bucketName + ", Resume Uploads: " + resumeUploads + ", Delete Original Files: " + deleteOriginalFiles + ", Version Files: " + versionFile + ", Upload Delay: " + uploadDelay,
+			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #49]");
+			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] Local Storage Dir: " + storageDirStr + ", S3 Bucket Name: " + bucketName + ", File Prefix: " + filePrefix + ", Resume Uploads: " + resumeUploads + ", Delete Original Files: " + deleteOriginalFiles + ", Version Files: " + versionFile + ", Upload Delay: " + uploadDelay,
 					WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 			transferManager = TransferManagerBuilder.standard().withS3Client(s3Client).build();
 
@@ -469,6 +468,10 @@ public class ModuleS3Upload extends ModuleBase
 			});
 
 			appInstance.addMediaWriterListener(new WriteListener());
+		}
+		catch (IllegalStateException ise)
+		{
+			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] The installed version of AWS SDK isn't compatible with this version of Wowza Streaming Engine. Please upgrade your version of AWS SDK");
 		}
 		catch (AmazonS3Exception ase)
 		{
