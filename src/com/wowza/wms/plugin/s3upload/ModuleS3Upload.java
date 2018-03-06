@@ -335,6 +335,7 @@ public class ModuleS3Upload extends ModuleBase
 	private File storageDir = null;
 	private Map<String, Timer> uploadTimers = new HashMap<String, Timer>();
 
+	private boolean checkBucket = true;
 	private boolean debugLog = false;
 	private boolean shuttingDown = false;
 	private boolean resumeUploads = true;
@@ -370,6 +371,7 @@ public class ModuleS3Upload extends ModuleBase
 			if(StringUtils.isEmpty(region))
 				endpoint = props.getPropertyStr("s3UploadEndpoint", endpoint);
 			
+			checkBucket = props.getPropertyBoolean("s3UploadCheckBucket", checkBucket);
 			debugLog = props.getPropertyBoolean("s3UploadDebugLog", debugLog);
 			resumeUploads = props.getPropertyBoolean("s3UploadResumeUploads", resumeUploads);
 			restartFailedUploads = props.getPropertyBoolean("s3UploadRestartFailedUploads", restartFailedUploads);
@@ -409,7 +411,6 @@ public class ModuleS3Upload extends ModuleBase
 				// assume we are running on ec2 and have a iam role set.
 				credentialsProvider = new InstanceProfileCredentialsProvider(false);
 				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 Credentials. Using iam role", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
-//				return;
 			}
 			else
 			{
@@ -417,7 +418,6 @@ public class ModuleS3Upload extends ModuleBase
 				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using supplied S3 credentials", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 			}
 
-//			AmazonS3 s3Client = new AmazonS3Client(new BasicAWSCredentials(accessKey, secretKey));
 			AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard().withCredentials(credentialsProvider);
 
 			if (!StringUtils.isEmpty(region))
@@ -430,21 +430,13 @@ public class ModuleS3Upload extends ModuleBase
 
 			if (!StringUtils.isEmpty(bucketName))
 			{
-				boolean hasBucket = false;
-//				List<Bucket> buckets = s3Client.listBuckets();
-//				for (Bucket bucket : buckets)
-//				{
-//					if (bucket.getName().equals(bucketName))
-//					{
-//						hasBucket = true;
-//						break;
-//					}
-//				}
-				String location = s3Client.getBucketLocation(bucketName);
-				if(s3Client.getRegionName().equals(location))
+				boolean hasBucket = true;
+				if(checkBucket)
 				{
-					hasBucket = true;
+					String location = s3Client.getBucketLocation(bucketName);
+					hasBucket = s3Client.getRegionName().equals(location);
 				}
+				
 				if (!hasBucket)
 				{
 					logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 bucket: " + bucketName, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
