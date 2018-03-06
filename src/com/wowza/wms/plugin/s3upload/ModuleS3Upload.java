@@ -440,6 +440,10 @@ public class ModuleS3Upload extends ModuleBase
 
 			appInstance.addMediaWriterListener(new WriteListener());
 		}
+		catch (IllegalStateException ise)
+		{
+			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] The installed version of AWS SDK isn't compatible with this version of Wowza Streaming Engine. Please upgrade your version of AWS SDK");
+		}
 		catch (AmazonS3Exception ase)
 		{
 			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] AmazonS3Exception: " + ase.getMessage());
