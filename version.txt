@@ -1,3 +1,13 @@
+Build 50
+	* Added support for all AWS S3 authentication methods. If credentials aren't set in properties then the `Default Credentials Provider Chain` will be used. See https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default for details.
+	* Added `s3UploadAwsProfile` property to define a aws profile to use. default: null
+	* Added `s3UploadAwsProfilePath` property to define a different location for the aws profile settings default: null
+	* Added `s3UploadRegion` property to define the region that the s3 bucket is located in. default: null
+	* Added `s3UploadUseDefaultRegion` property to tell the uploader to use the same region as the EC2 instance or the default region set by the AWS SDK if `s3UploadRegion` isn't set. default: true
+	* Added `s3UploadAllowBucketRegionOverride` property to turn on global bucket access so that a region mismatch won't cause uploads to fail. default: true
+	* Added support for S3 Canned ACLs. `s3UploadCannedAcl` property is used to specify the the canned ACL from the list here, https://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html#canned-acl. default: null
+	* Modified workflow so that s3 failures wouldn't prevent recordings from being marked for upload, allowing them to upload automatically once service is resumed.
+
 Build 49
 	* Changed storageDir field to reference `streamRecorderOutputPath` property, if set
 

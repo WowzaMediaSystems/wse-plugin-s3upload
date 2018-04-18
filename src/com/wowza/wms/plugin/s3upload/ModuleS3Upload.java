@@ -18,18 +18,24 @@ import java.util.List;
 import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.auth.InstanceProfileCredentialsProvider;
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.event.ProgressEvent;
 import com.amazonaws.event.ProgressEventType;
+import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.AccessControlList;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
+import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.GroupGrantee;
+import com.amazonaws.services.s3.model.HeadBucketRequest;
+import com.amazonaws.services.s3.model.HeadBucketResult;
 import com.amazonaws.services.s3.model.Permission;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.transfer.PersistableTransfer;
@@ -170,8 +176,7 @@ public class ModuleS3Upload extends ModuleBase
 
 			if (transferManager == null)
 			{
-				logger.error(MODULE_NAME + ".WriteListener.onWriteComplete Cannot upload file because S3 Transfer Manager isn't loaded: [" + appInstance.getContextStr() + "/" + mediaName + "]");
-				return;
+				logger.warn(MODULE_NAME + ".WriteListener.onWriteComplete Cannot upload file because S3 Transfer Manager isn't loaded: [" + appInstance.getContextStr() + "/" + mediaName + "]");
 			}
 
 			File uploadFile = null;
@@ -303,6 +308,7 @@ public class ModuleS3Upload extends ModuleBase
 						finally
 						{
 							if (fos != null)
+							{
 								try
 								{
 									fos.close();
@@ -310,6 +316,7 @@ public class ModuleS3Upload extends ModuleBase
 								catch (Exception e)
 								{
 								}
+							}
 						}
 					}
 				}
@@ -325,17 +332,22 @@ public class ModuleS3Upload extends ModuleBase
 
 	private TransferManager transferManager = null;
 	private AccessControlList acl = null;
+	private CannedAccessControlList cannedAcl = null;
 
 	private String accessKey = null;
 	private String secretKey = null;
+	private String awsProfile = null;
+	private String awsProfilePath = null;
 	private String bucketName = null;
 	private String filePrefix = null;
 	private String endpoint = null;
-	private String region = "us-east-1";
+	private String regionName = null;
 	private File storageDir = null;
 	private Map<String, Timer> uploadTimers = new HashMap<String, Timer>();
 
 	private boolean checkBucket = true;
+	private boolean useDefaultRegion = true;
+	private boolean allowBucketRegionOverride = true;
 	private boolean debugLog = false;
 	private boolean shuttingDown = false;
 	private boolean resumeUploads = true;
@@ -354,6 +366,7 @@ public class ModuleS3Upload extends ModuleBase
 	{
 		this.appInstance = appInstance;
 		logger = WMSLoggerFactory.getLoggerObj(appInstance);
+		logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #50]");
 		touchTimeout = appInstance.getApplicationInstanceTouchTimeout() / 2;
 
 		try
@@ -363,14 +376,23 @@ public class ModuleS3Upload extends ModuleBase
 			storageDir = new File(storageDirStr);
 			accessKey = props.getPropertyStr("s3UploadAccessKey", accessKey);
 			secretKey = props.getPropertyStr("s3UploadSecretKey", secretKey);
+			awsProfile = props.getPropertyStr("s3UploadAwsProfile", awsProfile);
+			awsProfilePath = props.getPropertyStr("s3UploadAwsProfilePath", awsProfilePath);
 			bucketName = props.getPropertyStr("s3UploadBucketName", bucketName);
 			filePrefix = props.getPropertyStr("s3UploadFilePrefix", filePrefix);
-			
-			// prefer to set region rather than endpoint
-			region = props.getPropertyStr("s3UploadRegion", region);
-			if(StringUtils.isEmpty(region))
+
+			// prefer to set region rather than endpoint which will be deprecated at some point.
+			regionName = props.getPropertyStr("s3UploadRegion", regionName);
+			if (StringUtils.isEmpty(regionName))
+			{
 				endpoint = props.getPropertyStr("s3UploadEndpoint", endpoint);
-			
+				regionName = getRegion();
+			}
+			// if region or endpoint isn't set then use the default region.
+			// disable if region can be determined via the DefaultAwsRegionProviderChain.
+			useDefaultRegion = props.getPropertyBoolean("s3UploadUseDefaultRegion", useDefaultRegion);
+			//  turn on global bucket access so that uploads won't fail if the region is incorrect.
+			allowBucketRegionOverride = props.getPropertyBoolean("s3UploadAllowBucketRegionOverride", allowBucketRegionOverride);
 			checkBucket = props.getPropertyBoolean("s3UploadCheckBucket", checkBucket);
 			debugLog = props.getPropertyBoolean("s3UploadDebugLog", debugLog);
 			resumeUploads = props.getPropertyBoolean("s3UploadResumeUploads", resumeUploads);
@@ -404,50 +426,88 @@ public class ModuleS3Upload extends ModuleBase
 				acl.grantPermission(grantee, permission);
 			}
 
+			String cannedAclStr = props.getPropertyStr("s3UploadCannedAcl");
+			if (!StringUtils.isEmpty(cannedAclStr))
+			{
+				for (CannedAccessControlList c : CannedAccessControlList.values())
+				{
+					if (c.toString().equals(cannedAclStr))
+					{
+						cannedAcl = c;
+						break;
+					}
+				}
+			}
+
+			AmazonS3 s3Client = null;
+			AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
+			Regions region = null;
+			try
+			{
+				region = Regions.fromName(regionName);
+			}
+			catch (IllegalArgumentException e)
+			{
+				if (useDefaultRegion)
+				{
+					region = Regions.getCurrentRegion() != null ? Regions.fromName(Regions.getCurrentRegion().getName()) : Regions.DEFAULT_REGION;
+				}
+			}
+			finally
+			{
+				if (region != null)
+				{
+					builder.withRegion(region);
+					if (allowBucketRegionOverride)
+					{
+						builder.withForceGlobalBucketAccessEnabled(true);
+					}
+				}
+			}
 			AWSCredentialsProvider credentialsProvider = null;
 
-			if (StringUtils.isEmpty(accessKey) || StringUtils.isEmpty(secretKey))
+			// backwards compatibility
+			if (!StringUtils.isEmpty(accessKey) && !StringUtils.isEmpty(secretKey))
 			{
-				// assume we are running on ec2 and have a iam role set.
-				credentialsProvider = new InstanceProfileCredentialsProvider(false);
-				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 Credentials. Using iam role", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using supplied aws credentials", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+				credentialsProvider = new AWSStaticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey));
+			}
+			else if (!StringUtils.isEmpty(awsProfile))
+			{
+				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using aws profile: " + awsProfile, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+				if (StringUtils.isEmpty(awsProfilePath))
+				{
+					credentialsProvider = new ProfileCredentialsProvider(awsProfile);
+				}
+				else
+				{
+					credentialsProvider = new ProfileCredentialsProvider(awsProfilePath, awsProfile);
+				}
 			}
 			else
 			{
-				credentialsProvider = new AWSStaticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey));
-				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using supplied S3 credentials", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using default aws credentials provider chain", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+
 			}
 
-			AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard().withCredentials(credentialsProvider);
+			if (credentialsProvider != null)
+				builder.withCredentials(credentialsProvider);
 
-			if (!StringUtils.isEmpty(region))
-				builder.withRegion(region);
+			s3Client = builder.build();
 
-			AmazonS3 s3Client = builder.build();
-
-			if (!StringUtils.isEmpty(endpoint) && StringUtils.isEmpty(region))
-				s3Client.setEndpoint(endpoint);
-
-			if (!StringUtils.isEmpty(bucketName))
+			if (checkBucket)
 			{
-				boolean hasBucket = true;
-				if(checkBucket)
-				{
-					String location = s3Client.getBucketLocation(bucketName);
-					hasBucket = s3Client.getRegionName().equals(location);
-				}
-				
-				if (!hasBucket)
-				{
-					logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 bucket: " + bucketName, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
-					return;
-				}
+				// check that the bucket exists and the s3Client can access it.
+				// fails with a 404 response if the bucket doesn't exist and a 403 response if the s3Client doesn't have permission to access it.
+				// fails with a 301 response if the bucket is in a different region and allowBucketRegionOverride isn't set (otherwise log a warning).
+				HeadBucketResult headBucketResult = s3Client.headBucket(new HeadBucketRequest(bucketName));
+				String bucketRegion = headBucketResult.getBucketRegion();
+				if (!bucketRegion.equalsIgnoreCase(regionName))
+					logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] bucket region doesn't match configured region. (b:c)[" + bucketRegion + ":" + regionName + "]", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 			}
-
-			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #49]");
-			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] Local Storage Dir: " + storageDirStr + ", S3 Bucket Name: " + bucketName + ", File Prefix: " + filePrefix + ", Resume Uploads: " + resumeUploads + ", Delete Original Files: " + deleteOriginalFiles + ", Version Files: " + versionFile + ", Upload Delay: " + uploadDelay,
-					WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 			transferManager = TransferManagerBuilder.standard().withS3Client(s3Client).build();
+			logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] Local Storage Dir: " + storageDirStr + ", S3 Bucket Name: " + bucketName + ", File Prefix: " + filePrefix + ", Resume Uploads: " + resumeUploads + ", Delete Original Files: " + deleteOriginalFiles
+					+ ", Version Files: " + versionFile + ", Upload Delay: " + uploadDelay, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 
 			appInstance.getVHost().getThreadPool().execute(new Runnable()
 			{
@@ -458,16 +518,17 @@ public class ModuleS3Upload extends ModuleBase
 					resumeUploads();
 				}
 			});
-
-			appInstance.addMediaWriterListener(new WriteListener());
 		}
 		catch (IllegalStateException ise)
 		{
 			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] The installed version of AWS SDK isn't compatible with this version of Wowza Streaming Engine. Please upgrade your version of AWS SDK");
 		}
-		catch (AmazonS3Exception ase)
+		catch (AmazonServiceException ase)
 		{
-			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] AmazonS3Exception: " + ase.getMessage());
+			int status = ase.getStatusCode();
+			String message = ase.getErrorMessage();
+
+			logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] missing S3 bucket: " + bucketName + ", S3 returned status: " + status + ", message: " + message, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 		}
 		catch (Exception e)
 		{
@@ -477,6 +538,8 @@ public class ModuleS3Upload extends ModuleBase
 		{
 			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] throwable exception: " + t.getMessage(), t);
 		}
+
+		appInstance.addMediaWriterListener(new WriteListener());
 	}
 
 	public void onAppStop(IApplicationInstance appInstance)
@@ -596,10 +659,15 @@ public class ModuleS3Upload extends ModuleBase
 						// In order to support setting ACL permissions for the file upload, we will wrap the upload properties in a PutObjectRequest
 						PutObjectRequest putObjectRequest = new PutObjectRequest(bucketName, uploadName, mediaFile);
 
-						// If the user has specified ACL properties, setup the putObjectRequest with the acl permissions generated
+						// if the user has specified ACL properties, setup the putObjectRequest with the acl permissions generated
 						if (acl != null)
 						{
 							putObjectRequest.withAccessControlList(acl);
+						}
+						// else add cannedACL if one is set
+						else if (cannedAcl != null)
+						{
+							putObjectRequest.withCannedAcl(cannedAcl);
 						}
 
 						upload = transferManager.upload(putObjectRequest);
@@ -642,7 +710,7 @@ public class ModuleS3Upload extends ModuleBase
 		}
 		else
 		{
-			logger.error(MODULE_NAME + ".startUpload error starting or resuming upload: [" + appInstance.getContextStr() + "/" + uploadFile.getName() + "] Amazon S3 TransferManager not running.");
+			logger.warn(MODULE_NAME + ".startUpload problem starting or resuming upload: [" + appInstance.getContextStr() + "/" + uploadFile.getName() + "] Amazon S3 TransferManager not running.");
 		}
 	}
 
@@ -720,5 +788,20 @@ public class ModuleS3Upload extends ModuleBase
 		if (debugLog)
 			logger.info(MODULE_NAME + ".getMediaNameVersion using: " + newName, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 		return newName;
+	}
+
+	private String getRegion()
+	{
+		if (!StringUtils.isEmpty(regionName))
+			return regionName;
+
+		Pattern pattern = Pattern.compile("(s3\\.dualstack.|s3\\.|s3-)(.+)\\.amazonaws.com");
+		if (!StringUtils.isEmpty(endpoint))
+		{
+			Matcher matcher = pattern.matcher(endpoint);
+			if (matcher.groupCount() >= 2)
+				regionName = matcher.group(2);
+		}
+		return regionName;
 	}
 }
