@@ -366,7 +366,7 @@ public class ModuleS3Upload extends ModuleBase
 	{
 		this.appInstance = appInstance;
 		logger = WMSLoggerFactory.getLoggerObj(appInstance);
-		logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #50]");
+		logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #51]");
 		touchTimeout = appInstance.getApplicationInstanceTouchTimeout() / 2;
 
 		try
@@ -451,6 +451,9 @@ public class ModuleS3Upload extends ModuleBase
 				if (useDefaultRegion)
 				{
 					region = Regions.getCurrentRegion() != null ? Regions.fromName(Regions.getCurrentRegion().getName()) : Regions.DEFAULT_REGION;
+					// set the regionName to the default region. Used in the bucket check later.
+					if(region != null)
+						regionName = region.getName();
 				}
 			}
 			finally
@@ -521,7 +524,7 @@ public class ModuleS3Upload extends ModuleBase
 		}
 		catch (IllegalStateException ise)
 		{
-			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] The installed version of AWS SDK isn't compatible with this version of Wowza Streaming Engine. Please upgrade your version of AWS SDK");
+			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] The installed version of AWS SDK isn't compatible with this version of Wowza Streaming Engine. Please upgrade your version of AWS SDK. ", ise);
 		}
 		catch (AmazonServiceException ase)
 		{

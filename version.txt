@@ -1,3 +1,7 @@
+Build 51
+	* Fixed null region name when `useDefaultRegion` was set
+	* Add stack trace logging to the IllegalStateException that we log when the AWS SDK version is too old
+
 Build 50
 	* Added support for all AWS S3 authentication methods. If credentials aren't set in properties then the `Default Credentials Provider Chain` will be used. See https://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/credentials.html#credentials-default for details.
 	* Added `s3UploadAwsProfile` property to define a aws profile to use. default: null
