@@ -419,7 +419,7 @@ public class ModuleS3Upload extends ModuleBase
 			if (!StringUtils.isEmpty(aclPermissionRule))
 				permission = Permission.parsePermission(aclPermissionRule.toUpperCase());
 
-			// If we have properties for specifying permisions on the file upload, create the AccessControlList object and set the Grantee and Permissions
+			// If we have properties for specifying permissions on the file upload, create the AccessControlList object and set the Grantee and Permissions
 			if (grantee != null && permission != null)
 			{
 				acl = new AccessControlList();
@@ -524,7 +524,7 @@ public class ModuleS3Upload extends ModuleBase
 		}
 		catch (IllegalStateException ise)
 		{
-			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] The installed version of AWS SDK isn't compatible with this version of Wowza Streaming Engine. Please upgrade your version of AWS SDK. ", ise);
+			logger.error(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + "] Illegal State Exception thrown. The installed version of AWS SDK may not be compatible with this version of Wowza Streaming Engine. Please check and upgrade your version of AWS SDK.", ise);
 		}
 		catch (AmazonServiceException ase)
 		{
@@ -798,12 +798,23 @@ public class ModuleS3Upload extends ModuleBase
 		if (!StringUtils.isEmpty(regionName))
 			return regionName;
 
-		Pattern pattern = Pattern.compile("(s3\\.dualstack.|s3\\.|s3-)(.+)\\.amazonaws.com");
-		if (!StringUtils.isEmpty(endpoint))
+		try
 		{
-			Matcher matcher = pattern.matcher(endpoint);
-			if (matcher.groupCount() >= 2)
-				regionName = matcher.group(2);
+			Pattern pattern = Pattern.compile("(s3\\.dualstack.|s3\\.|s3-)(.+)\\.amazonaws.com");
+			if (!StringUtils.isEmpty(endpoint))
+			{
+				Matcher matcher = pattern.matcher(endpoint);
+				if (matcher.matches())
+					regionName = matcher.group(2);
+				
+				if(StringUtils.isEmpty(regionName))
+					logger.warn(MODULE_NAME + ".getRegion [" + appInstance.getContextStr() + "] Unable to extract region name from endpoint. [" + endpoint + "]");
+			}
+		}
+		catch (Exception e)
+		{
+			logger.warn(MODULE_NAME + ".getRegion [" + appInstance.getContextStr() + "] Exception throw while trying to extract region name from endpoint. [" + endpoint + "]", e);
+
 		}
 		return regionName;
 	}

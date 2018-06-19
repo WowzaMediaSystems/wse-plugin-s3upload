@@ -1,3 +1,7 @@
+Build 52
+	* Fixed problem with trying to extract the region name from the endpoint property
+	* Updated logging for region name matching so that it doesn't trigger the wrong error message 
+
 Build 51
 	* Fixed null region name when `useDefaultRegion` was set
 	* Add stack trace logging to the IllegalStateException that we log when the AWS SDK version is too old
