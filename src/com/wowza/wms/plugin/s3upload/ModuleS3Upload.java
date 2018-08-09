@@ -123,6 +123,10 @@ public class ModuleS3Upload extends ModuleBase
 					uploadTimers.remove(mediaName);
 					cancel();
 				}
+				else
+				{
+					touchAppInstance();
+				}
 			}
 
 			if (doUpload)
@@ -130,18 +134,6 @@ public class ModuleS3Upload extends ModuleBase
 				if (debugLog)
 					logger.info(MODULE_NAME + ".UploadTask.run() starting upload [" + appInstance.getContextStr() + "/" + mediaName + "]", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 				startUpload(mediaName);
-			}
-			else
-			{
-				// touch the appInstance so it doesn't timeout while we are still uploading.
-				long now = System.currentTimeMillis();
-				if (now - touchTimeout >= lastTouch)
-				{
-					if (debugLog)
-						logger.info(MODULE_NAME + ".UploadTask.run() touching appInstance [" + appInstance.getContextStr() + "/" + mediaName + "]", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
-					appInstance.touch();
-					lastTouch = now;
-				}
 			}
 		}
 	}
@@ -267,16 +259,7 @@ public class ModuleS3Upload extends ModuleBase
 					break;
 				}
 			}
-
-			// touch the appInstance so it doesn't timeout while we are still uploading.
-			long now = System.currentTimeMillis();
-			if (now - touchTimeout >= lastTouch)
-			{
-				if (debugLog)
-					logger.info(MODULE_NAME + ".ProgressListener.progressChanged touching appInstance [" + appInstance.getContextStr() + "/" + mediaName + "]", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
-				appInstance.touch();
-				lastTouch = now;
-			}
+			touchAppInstance();
 		}
 
 		@Override
@@ -366,7 +349,7 @@ public class ModuleS3Upload extends ModuleBase
 	{
 		this.appInstance = appInstance;
 		logger = WMSLoggerFactory.getLoggerObj(appInstance);
-		logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #51]");
+		logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #53]");
 		touchTimeout = appInstance.getApplicationInstanceTouchTimeout() / 2;
 
 		try
@@ -452,7 +435,7 @@ public class ModuleS3Upload extends ModuleBase
 				{
 					region = Regions.getCurrentRegion() != null ? Regions.fromName(Regions.getCurrentRegion().getName()) : Regions.DEFAULT_REGION;
 					// set the regionName to the default region. Used in the bucket check later.
-					if(region != null)
+					if (region != null)
 						regionName = region.getName();
 				}
 			}
@@ -631,6 +614,8 @@ public class ModuleS3Upload extends ModuleBase
 
 	private void startUpload(String mediaName)
 	{
+		touchAppInstance();
+
 		File uploadFile = new File(storageDir, mediaName + ".upload");
 		if (uploadFile == null || !uploadFile.exists())
 			return;
@@ -787,6 +772,7 @@ public class ModuleS3Upload extends ModuleBase
 			if (!exists)
 				break;
 			version++;
+			touchAppInstance();
 		}
 		if (debugLog)
 			logger.info(MODULE_NAME + ".getMediaNameVersion using: " + newName, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
@@ -806,8 +792,8 @@ public class ModuleS3Upload extends ModuleBase
 				Matcher matcher = pattern.matcher(endpoint);
 				if (matcher.matches())
 					regionName = matcher.group(2);
-				
-				if(StringUtils.isEmpty(regionName))
+
+				if (StringUtils.isEmpty(regionName))
 					logger.warn(MODULE_NAME + ".getRegion [" + appInstance.getContextStr() + "] Unable to extract region name from endpoint. [" + endpoint + "]");
 			}
 		}
@@ -817,5 +803,18 @@ public class ModuleS3Upload extends ModuleBase
 
 		}
 		return regionName;
+	}
+
+	private void touchAppInstance()
+	{
+		// touch the appInstance so it doesn't timeout while we are still uploading.
+		long now = System.currentTimeMillis();
+		if (now - touchTimeout >= lastTouch)
+		{
+			if (debugLog)
+				logger.info(MODULE_NAME + " touching appInstance [" + appInstance.getContextStr() + "]", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+			appInstance.touch();
+			lastTouch = now;
+		}
 	}
 }

@@ -1,3 +1,6 @@
+Build 53
+	* Touch appInstance more often to keep it from shutting down while preparing to start an upload
+
 Build 52
 	* Fixed problem with trying to extract the region name from the endpoint property
 	* Updated logging for region name matching so that it doesn't trigger the wrong error message 
