@@ -1,3 +1,7 @@
+Build 54
+	* Added `s3UploadStripRecorderVersioning` property to remove recorder versioning from the file name before versioning on S3 so that the files aren't versioned twice
+	* Improved version checks to make sure current uploads and unfinished multi part uploads are included.
+
 Build 53
 	* Touch appInstance more often to keep it from shutting down while preparing to start an upload
 
