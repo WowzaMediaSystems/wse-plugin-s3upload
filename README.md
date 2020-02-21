@@ -22,7 +22,7 @@ When a recording is finished, a temporary file named **[recording-name].upload**
 When the Wowza Streaming Engine application starts or restarts, the module checks to see if any interrupted uploads must be completed. Interrupted single part uploads are restarted from the beginning while interrupted multipart uploads are resumed from the last complete part. If the module is set to not resume uploads after interruptions (**s3UploadResumeUploads** = **false**), incomplete multipart uploads are deleted from the S3 bucket.
 
 ## More resources
-[Wowza Streaming Engine Server-Side API Reference](https://www.wowza.com/resources/WowzaStreamingEngine_ServerSideAPI.pdf)
+[Wowza Streaming Engine Server-Side API Reference](https://www.wowza.com/resources/serverapi/)
 
 [How to extend Wowza Streaming Engine using the Wowza IDE](https://www.wowza.com/forums/content.php?759-How-to-extend-Wowza-Streaming-Engine-using-the-Wowza-IDE)
 
@@ -35,5 +35,3 @@ To use the compiled version of this module, see [How to upload recorded media to
 
 ## License
 This code is distributed under the [Wowza Public License](https://github.com/WowzaMediaSystems/wse-plugin-s3upload/blob/master/LICENSE.txt).
-
-![alt tag](http://wowzalogs.com/stats/githubimage.php?plugin=wse-plugin-s3upload)
