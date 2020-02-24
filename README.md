@@ -1,6 +1,8 @@
 # S3Upload
 The **ModuleS3Upload** module for [Wowza Streaming Engine™ media server software](https://www.wowza.com/products/streaming-engine) automatically uploads finished recordings to an Amazon S3 bucket. It uses the Amazon Web Services (AWS) SDK for Java to upload the recorded files.
 
+This repo includes a [compiled version](/lib/wse-plugin-s3upload.jar).
+
 ## Prerequisites
 Wowza Streaming Engine 4.7.2.02 or later is recommended. For earlier versions see note below regarding AWS SDK version.
 
@@ -22,16 +24,16 @@ When a recording is finished, a temporary file named **[recording-name].upload**
 When the Wowza Streaming Engine application starts or restarts, the module checks to see if any interrupted uploads must be completed. Interrupted single part uploads are restarted from the beginning while interrupted multipart uploads are resumed from the last complete part. If the module is set to not resume uploads after interruptions (**s3UploadResumeUploads** = **false**), incomplete multipart uploads are deleted from the S3 bucket.
 
 ## More resources
+Visit the documentation for more information on how to use this module over on [How to upload recorded media to an Amazon S3 bucket (S3Upload)](https://www.wowza.com/docs/how-to-upload-recorded-media-to-an-amazon-s3-bucket-modules3upload).
+
 [Wowza Streaming Engine Server-Side API Reference](https://www.wowza.com/resources/serverapi/)
 
-[How to extend Wowza Streaming Engine using the Wowza IDE](https://www.wowza.com/forums/content.php?759-How-to-extend-Wowza-Streaming-Engine-using-the-Wowza-IDE)
+[How to extend Wowza Streaming Engine using the Wowza IDE](https://www.wowza.com/docs/how-to-extend-wowza-streaming-engine-using-the-wowza-ide)
 
-Wowza Media Systems™ provides developers with a platform to create streaming applications and solutions. See [Wowza Developer Tools](https://www.wowza.com/resources/developers) to learn more about our APIs and SDK.
-
-To use the compiled version of this module, see [How to upload recorded media to an Amazon S3 bucket (S3Upload)](https://www.wowza.com/forums/content.php?813-How-to-upload-recorded-media-to-an-Amazon-S3-bucket-%28ModuleS3Upload%29).
+Wowza Media Systems™ provides developers with a platform to create streaming applications and solutions. See [Wowza Developer Tools](https://www.wowza.com/developer) to learn more about our APIs and SDK.
 
 ## Contact
 [Wowza Media Systems, LLC](https://www.wowza.com/contact)
 
 ## License
-This code is distributed under the [Wowza Public License](https://github.com/WowzaMediaSystems/wse-plugin-s3upload/blob/master/LICENSE.txt).
+This code is distributed under the [Wowza Public License](/LICENSE.txt).
