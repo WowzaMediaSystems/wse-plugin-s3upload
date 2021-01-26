@@ -367,14 +367,14 @@ public class ModuleS3Upload extends ModuleBase
 		try
 		{
 			WMSProperties props = appInstance.getProperties();
-			String storageDirStr = appInstance.getStreamRecorderProperties().getPropertyStr("streamRecorderOutputPath", appInstance.getStreamStorageDir());
+			String storageDirStr = appInstance.decodeStorageDir(appInstance.getStreamRecorderProperties().getPropertyStr("streamRecorderOutputPath", appInstance.getStreamStorageDir()));
 			storageDir = new File(storageDirStr);
 			accessKey = props.getPropertyStr("s3UploadAccessKey", accessKey);
 			secretKey = props.getPropertyStr("s3UploadSecretKey", secretKey);
 			awsProfile = props.getPropertyStr("s3UploadAwsProfile", awsProfile);
 			awsProfilePath = props.getPropertyStr("s3UploadAwsProfilePath", awsProfilePath);
 			bucketName = props.getPropertyStr("s3UploadBucketName", bucketName);
-			filePrefix = props.getPropertyStr("s3UploadFilePrefix", filePrefix);
+			filePrefix = appInstance.decodeStorageDir(props.getPropertyStr("s3UploadFilePrefix", filePrefix));
 
 			// prefer to set region rather than endpoint which will be deprecated at some point.
 			regionName = props.getPropertyStr("s3UploadRegion", regionName);

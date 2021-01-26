@@ -1,3 +1,6 @@
+Build 55
+	* Added support for path variables when defining s3UploadFilePrefix and streamRecorderOutputPath properties
+
 Build 54
 	* Added `s3UploadStripRecorderVersioning` property to remove recorder versioning from the file name before versioning on S3 so that the files aren't versioned twice
 	* Improved version checks to make sure current uploads and unfinished multi part uploads are included.
@@ -7,7 +10,7 @@ Build 53
 
 Build 52
 	* Fixed problem with trying to extract the region name from the endpoint property
-	* Updated logging for region name matching so that it doesn't trigger the wrong error message 
+	* Updated logging for region name matching so that it doesn't trigger the wrong error message
 
 Build 51
 	* Fixed null region name when `useDefaultRegion` was set
