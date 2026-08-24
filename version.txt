@@ -1,3 +1,15 @@
+1.0.0
+	* Switched from build numbers to semantic versioning; the version is defined in the VERSION file
+	* Builds are now released through GitHub releases and include the required AWS SDK jars (1.12.797); the checked-in compiled jar has been removed
+	* Requires Wowza Streaming Engine 4.9.0 or later (built with Java 17)
+
+Build 56
+	* Added support for S3-compatible services (Backblaze B2, MinIO, Wasabi, etc.). Setting `s3UploadEndpoint` to a non-AWS endpoint now targets that endpoint directly instead of only being used to derive an AWS region; the signing region is taken from `s3UploadRegion`, derived from `s3.<region>.<host>` style endpoints, or defaults to `us-east-1`
+	* `s3UploadEndpoint` is now read even when `s3UploadRegion` is set
+	* Added `s3UploadPathStyleAccess` property for services that require path-style bucket addressing (e.g. MinIO). default: false
+	* Added `s3UploadProfile` and `s3UploadProfilePath` as provider-neutral aliases for `s3UploadAwsProfile` and `s3UploadAwsProfilePath`
+	* Fixed possible NullPointerException in the startup bucket check when the service doesn't return a bucket region header
+
 Build 55
 	* Added support for path variables when defining s3UploadFilePrefix and streamRecorderOutputPath properties
 

@@ -1,0 +1,92 @@
+plugins {
+    id 'java-library'
+}
+
+group = 'com.wowza.wms.plugin.s3upload'
+version = file('VERSION').text.trim()
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly fileTree(dir: "$wseLibDir", include: '*.jar')
+    compileOnly 'org.apache.logging.log4j:log4j-core:2.25.4'
+    compileOnly 'org.apache.logging.log4j:log4j-api:2.25.4'
+    implementation('com.amazonaws:aws-java-sdk-s3:1.12.797') {
+        // Not needed at runtime by this module (verified with jdeps): kms is
+        // only used by the S3 client-side encryption client, jmespath and
+        // cbor only by SDK code paths S3 doesn't use
+        exclude group: 'com.amazonaws', module: 'aws-java-sdk-kms'
+        exclude group: 'com.amazonaws', module: 'jmespath-java'
+        exclude group: 'com.fasterxml.jackson.dataformat', module: 'jackson-dataformat-cbor'
+    }
+    testCompileOnly fileTree(dir: "$wseLibDir", include: '*.jar')
+}
+
+tasks.register('generateReleaseInfo') {
+    group = 'build'
+    Provider<Directory> outputDir = layout.buildDirectory.dir('generated/java') as Provider<Directory>
+    outputs.dir outputDir.get().asFile.absolutePath
+
+    // Capture project values at configuration time -- accessing them inside
+    // doLast triggers a Gradle 10 deprecation (Task.project at execution time).
+    def packageDotPath = project.group.toString()
+    def releaseProjectName = projectName.toString()
+    def releaseVersion = project.version.toString()
+
+    doLast {
+        def packagePath = packageDotPath.replaceAll('\\.', '/')
+        Directory dir = outputDir.get().dir(packagePath)
+        dir.asFile.mkdirs()
+        dir.file('ReleaseInfo.java').asFile.text =
+                """|package $packageDotPath;
+                   |public class ReleaseInfo {
+                   |    public static String getProject() { return "${releaseProjectName}"; }
+                   |    public static String getVersion() { return "${releaseVersion}"; }
+                   |}""".stripMargin()
+    }
+}
+
+sourceSets.main.java.srcDir generateReleaseInfo
+compileJava.dependsOn generateReleaseInfo
+clean.finalizedBy generateReleaseInfo
+
+// Copy runtime dependencies alongside the plugin jar, skipping any jar that
+// Wowza Streaming Engine already ships in its lib folder (matched by module
+// name with the version suffix stripped).
+tasks.register('copyDeps', Sync) {
+    def stripVersion = { String name -> name.replaceAll(/\.jar$/, '').replaceAll(/-\d.*$/, '') }
+    def wseModules = provider {
+        fileTree(dir: "$wseLibDir", include: '*.jar').files.collect { stripVersion(it.name) } as Set
+    }
+    from configurations.runtimeClasspath
+    into layout.buildDirectory.dir('libs')
+    exclude { element -> !element.directory && wseModules.get().contains(stripVersion(element.name)) }
+}
+
+tasks.withType(Jar).configureEach {
+    dependsOn copyDeps
+    manifest {
+        attributes(
+                'Gradle-Version' : "Gradle ${gradle.gradleVersion}",
+                'Created-By'     : "${System.properties['java.version']} (${System.properties['java.vendor']} ${System.properties['java.vm.version']})",
+                'Name'           : "${project.name}",
+                'Build-Version'  : "${project.version}"
+        )
+    }
+    metaInf {
+        from files('LICENSE.txt')
+    }
+    archiveBaseName = 'wse-plugin-' + projectName
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

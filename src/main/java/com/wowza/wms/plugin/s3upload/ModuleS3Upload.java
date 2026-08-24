@@ -27,6 +27,7 @@ import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.event.ProgressEvent;
 import com.amazonaws.event.ProgressEventType;
 import com.amazonaws.regions.Regions;
@@ -319,6 +320,8 @@ public class ModuleS3Upload extends ModuleBase
 
 	public static final String MODULE_NAME = "ModuleS3Upload";
 	public static final String PROP_NAME_PREFIX = "s3Upload";
+	// signing region used for S3-compatible services when none is set or derivable from the endpoint.
+	public static final String DEFAULT_SIGNING_REGION = "us-east-1";
 
 	private WMSLogger logger = null;
 	private IApplicationInstance appInstance = null;
@@ -340,6 +343,7 @@ public class ModuleS3Upload extends ModuleBase
 	private List<String> currentUploads = new ArrayList<String>();
 
 	private boolean checkBucket = true;
+	private boolean pathStyleAccess = false;
 	private boolean useDefaultRegion = true;
 	private boolean allowBucketRegionOverride = true;
 	private boolean debugLog = false;
@@ -361,7 +365,7 @@ public class ModuleS3Upload extends ModuleBase
 	{
 		this.appInstance = appInstance;
 		logger = WMSLoggerFactory.getLoggerObj(appInstance);
-		logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #55]");
+		logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : v" + ReleaseInfo.getVersion() + "]");
 		touchTimeout = appInstance.getApplicationInstanceTouchTimeout() / 2;
 
 		try
@@ -372,17 +376,23 @@ public class ModuleS3Upload extends ModuleBase
 			accessKey = props.getPropertyStr("s3UploadAccessKey", accessKey);
 			secretKey = props.getPropertyStr("s3UploadSecretKey", secretKey);
 			awsProfile = props.getPropertyStr("s3UploadAwsProfile", awsProfile);
+			// provider-neutral alias
+			awsProfile = props.getPropertyStr("s3UploadProfile", awsProfile);
 			awsProfilePath = props.getPropertyStr("s3UploadAwsProfilePath", awsProfilePath);
+			// provider-neutral alias
+			awsProfilePath = props.getPropertyStr("s3UploadProfilePath", awsProfilePath);
 			bucketName = props.getPropertyStr("s3UploadBucketName", bucketName);
 			filePrefix = appInstance.decodeStorageDir(props.getPropertyStr("s3UploadFilePrefix", filePrefix));
 
-			// prefer to set region rather than endpoint which will be deprecated at some point.
+			// For Amazon S3, prefer to set s3UploadRegion. Set s3UploadEndpoint to target any other S3-compatible
+			// service (Backblaze B2, MinIO, etc.); s3UploadRegion then sets the signing region if it can't be
+			// derived from the endpoint.
+			endpoint = props.getPropertyStr("s3UploadEndpoint", endpoint);
 			regionName = props.getPropertyStr("s3UploadRegion", regionName);
 			if (StringUtils.isEmpty(regionName))
-			{
-				endpoint = props.getPropertyStr("s3UploadEndpoint", endpoint);
 				regionName = getRegion();
-			}
+			// path-style access (bucket name in the path instead of the hostname) is required by some S3-compatible services.
+			pathStyleAccess = props.getPropertyBoolean("s3UploadPathStyleAccess", pathStyleAccess);
 			// if region or endpoint isn't set then use the default region.
 			// disable if region can be determined via the DefaultAwsRegionProviderChain.
 			useDefaultRegion = props.getPropertyBoolean("s3UploadUseDefaultRegion", useDefaultRegion);
@@ -437,29 +447,42 @@ public class ModuleS3Upload extends ModuleBase
 
 			AmazonS3 s3Client = null;
 			AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
-			Regions region = null;
-			try
+			if (pathStyleAccess)
+				builder.withPathStyleAccessEnabled(true);
+			if (isCustomEndpoint())
 			{
-				region = Regions.fromName(regionName);
+				// S3-compatible service: target the endpoint directly. The region only scopes request signing
+				// so it doesn't have to be a region the AWS SDK knows about.
+				if (StringUtils.isEmpty(regionName))
+					regionName = DEFAULT_SIGNING_REGION;
+				builder.withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(endpoint, regionName));
 			}
-			catch (IllegalArgumentException e)
+			else
 			{
-				if (useDefaultRegion)
+				Regions region = null;
+				try
 				{
-					region = Regions.getCurrentRegion() != null ? Regions.fromName(Regions.getCurrentRegion().getName()) : Regions.DEFAULT_REGION;
-					// set the regionName to the default region. Used in the bucket check later.
-					if (region != null)
-						regionName = region.getName();
+					region = Regions.fromName(regionName);
 				}
-			}
-			finally
-			{
-				if (region != null)
+				catch (IllegalArgumentException e)
 				{
-					builder.withRegion(region);
-					if (allowBucketRegionOverride)
+					if (useDefaultRegion)
 					{
-						builder.withForceGlobalBucketAccessEnabled(true);
+						region = Regions.getCurrentRegion() != null ? Regions.fromName(Regions.getCurrentRegion().getName()) : Regions.DEFAULT_REGION;
+						// set the regionName to the default region. Used in the bucket check later.
+						if (region != null)
+							regionName = region.getName();
+					}
+				}
+				finally
+				{
+					if (region != null)
+					{
+						builder.withRegion(region);
+						if (allowBucketRegionOverride)
+						{
+							builder.withForceGlobalBucketAccessEnabled(true);
+						}
 					}
 				}
 			}
@@ -468,12 +491,12 @@ public class ModuleS3Upload extends ModuleBase
 			// backwards compatibility
 			if (!StringUtils.isEmpty(accessKey) && !StringUtils.isEmpty(secretKey))
 			{
-				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using supplied aws credentials", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using supplied access key credentials", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 				credentialsProvider = new AWSStaticCredentialsProvider(new BasicAWSCredentials(accessKey, secretKey));
 			}
 			else if (!StringUtils.isEmpty(awsProfile))
 			{
-				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using aws profile: " + awsProfile, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using credentials profile: " + awsProfile, WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 				if (StringUtils.isEmpty(awsProfilePath))
 				{
 					credentialsProvider = new ProfileCredentialsProvider(awsProfile);
@@ -485,7 +508,7 @@ public class ModuleS3Upload extends ModuleBase
 			}
 			else
 			{
-				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using default aws credentials provider chain", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
+				logger.info(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] using default credentials provider chain", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 
 			}
 
@@ -500,8 +523,9 @@ public class ModuleS3Upload extends ModuleBase
 				// fails with a 404 response if the bucket doesn't exist and a 403 response if the s3Client doesn't have permission to access it.
 				// fails with a 301 response if the bucket is in a different region and allowBucketRegionOverride isn't set (otherwise log a warning).
 				HeadBucketResult headBucketResult = s3Client.headBucket(new HeadBucketRequest(bucketName));
+				// some S3-compatible services don't return the bucket region header.
 				String bucketRegion = headBucketResult.getBucketRegion();
-				if (!bucketRegion.equalsIgnoreCase(regionName))
+				if (bucketRegion != null && !bucketRegion.equalsIgnoreCase(regionName))
 					logger.warn(MODULE_NAME + ".onAppStart: [" + appInstance.getContextStr() + "] bucket region doesn't match configured region. (b:c)[" + bucketRegion + ":" + regionName + "]", WMSLoggerIDs.CAT_application, WMSLoggerIDs.EVT_comment);
 			}
 			transferManager = TransferManagerBuilder.standard().withS3Client(s3Client).build();
@@ -717,7 +741,7 @@ public class ModuleS3Upload extends ModuleBase
 		}
 		else
 		{
-			logger.warn(MODULE_NAME + ".startUpload problem starting or resuming upload: [" + appInstance.getContextStr() + "/" + uploadFile.getName() + "] Amazon S3 TransferManager not running.");
+			logger.warn(MODULE_NAME + ".startUpload problem starting or resuming upload: [" + appInstance.getContextStr() + "/" + uploadFile.getName() + "] S3 TransferManager not running.");
 		}
 	}
 
@@ -843,6 +867,11 @@ public class ModuleS3Upload extends ModuleBase
 		return exists;
 	}
 
+	private boolean isCustomEndpoint()
+	{
+		return !StringUtils.isEmpty(endpoint) && !endpoint.toLowerCase().contains("amazonaws.com");
+	}
+
 	private String getRegion()
 	{
 		if (!StringUtils.isEmpty(regionName))
@@ -850,12 +879,21 @@ public class ModuleS3Upload extends ModuleBase
 
 		try
 		{
-			Pattern pattern = Pattern.compile("(s3\\.dualstack.|s3\\.|s3-)(.+)\\.amazonaws.com");
+			Pattern awsPattern = Pattern.compile("(s3\\.dualstack.|s3\\.|s3-)(.+)\\.amazonaws.com");
+			// covers services that embed the region in the endpoint host, e.g. s3.us-west-004.backblazeb2.com
+			Pattern genericPattern = Pattern.compile("(?:https?://)?s3\\.([a-z0-9-]+)\\.[^./]+\\.[^/]+/?");
 			if (!StringUtils.isEmpty(endpoint))
 			{
-				Matcher matcher = pattern.matcher(endpoint);
+				Matcher matcher = awsPattern.matcher(endpoint);
 				if (matcher.matches())
 					regionName = matcher.group(2);
+
+				if (StringUtils.isEmpty(regionName) && isCustomEndpoint())
+				{
+					matcher = genericPattern.matcher(endpoint);
+					if (matcher.matches())
+						regionName = matcher.group(1);
+				}
 
 				if (StringUtils.isEmpty(regionName))
 					logger.warn(MODULE_NAME + ".getRegion [" + appInstance.getContextStr() + "] Unable to extract region name from endpoint. [" + endpoint + "]");
