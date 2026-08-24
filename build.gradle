@@ -28,7 +28,14 @@ dependencies {
     compileOnly fileTree(dir: "$wseLibDir", include: '*.jar')
     compileOnly 'org.apache.logging.log4j:log4j-core:2.25.4'
     compileOnly 'org.apache.logging.log4j:log4j-api:2.25.4'
-    implementation 'com.amazonaws:aws-java-sdk-s3:1.12.797'
+    implementation('com.amazonaws:aws-java-sdk-s3:1.12.797') {
+        // Not needed at runtime by this module (verified with jdeps): kms is
+        // only used by the S3 client-side encryption client, jmespath and
+        // cbor only by SDK code paths S3 doesn't use
+        exclude group: 'com.amazonaws', module: 'aws-java-sdk-kms'
+        exclude group: 'com.amazonaws', module: 'jmespath-java'
+        exclude group: 'com.fasterxml.jackson.dataformat', module: 'jackson-dataformat-cbor'
+    }
     testCompileOnly fileTree(dir: "$wseLibDir", include: '*.jar')
 }
 
