@@ -365,7 +365,7 @@ public class ModuleS3Upload extends ModuleBase
 	{
 		this.appInstance = appInstance;
 		logger = WMSLoggerFactory.getLoggerObj(appInstance);
-		logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : build #56]");
+		logger.info(MODULE_NAME + ".onAppStart [" + appInstance.getContextStr() + " : v" + ReleaseInfo.getVersion() + "]");
 		touchTimeout = appInstance.getApplicationInstanceTouchTimeout() / 2;
 
 		try

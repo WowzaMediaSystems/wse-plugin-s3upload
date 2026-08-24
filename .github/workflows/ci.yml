@@ -1,0 +1,48 @@
+name: Build
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Extract WSE libs from wowza-streaming-engine image
+        run: |
+          mkdir -p wse-lib
+          docker run --rm \
+            -v "$(pwd)/wse-lib:/output" \
+            --user "$(id -u):$(id -g)" \
+            --entrypoint sh \
+            wowza/wowza-streaming-engine:latest-slim \
+            -c 'cp /usr/local/WowzaStreamingEngine/lib.default/*.jar /output/'
+          echo "Extracted $(ls -1 wse-lib/*.jar | wc -l | xargs) WSE JAR files"
+
+      - name: Build & test
+        run: ./gradlew build -PwseLibDir=./wse-lib --no-daemon
+
+      - name: Read version
+        id: version
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Upload plugin JARs
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin-jars-${{ steps.version.outputs.version }}-${{ github.sha }}
+          path: build/libs/*.jar
+          retention-days: 7
+          if-no-files-found: error

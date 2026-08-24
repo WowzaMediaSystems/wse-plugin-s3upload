@@ -1,22 +1,12 @@
 # S3Upload
 The **ModuleS3Upload** module for [Wowza Streaming Engine™ media server software](https://www.wowza.com/products/streaming-engine) automatically uploads finished recordings to an S3 bucket — Amazon S3 or any S3-compatible object storage service (Backblaze B2, MinIO, Wasabi, etc.). It uses the Amazon Web Services (AWS) SDK for Java to upload the recorded files.
 
-This repo includes a [compiled version](/lib/wse-plugin-s3upload.jar).
+Compiled versions, including all required dependencies, are available from the [releases](https://github.com/WowzaMediaSystems/wse-plugin-s3upload/releases) page.
 
 ## Prerequisites
-Wowza Streaming Engine 4.7.2.02 or later is recommended. For earlier versions see note below regarding AWS SDK version.
+Wowza Streaming Engine™ 4.9.0 or later is required. The module is built with Java 17, which is supported by Wowza Streaming Engine 4.9.0 and later.
 
-[AWS SDK for Java](https://aws.amazon.com/sdk-for-java/)
-
-**Note:** For earlier versions of Wowza Streaming Engine™, AWS SDK version 1.10.77 or earlier is required. As a minimum, the following packages are required.
-
--[AWS Java SDK For Amazon S3](http://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-s3/1.10.77)
-
--[AWS SDK For Java Core](http://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-core/1.10.77)
-
--[AWS Java SDK For AWS KMS](http://mvnrepository.com/artifact/com.amazonaws/aws-java-sdk-kms/1.10.77) (it's not clear if this package is actually required. It's only referenced from AmazonS3EncryptionClient which isn't used in the S3 uploader)
-
-The version of [Apache httpclient](http://mvnrepository.com/artifact/org.apache.httpcomponents/httpclient) that ships with Wowza Streaming Engine prior to 4.7.2.02 isn't compatible with the later versions of the AWS SDK
+The [AWS SDK for Java](https://aws.amazon.com/sdk-for-java/) files that the module depends on are included with each [release](https://github.com/WowzaMediaSystems/wse-plugin-s3upload/releases), so there's nothing else to download. Copy the module jar and the accompanying SDK jars into the Wowza Streaming Engine `lib` folder. Only the SDK jars that Wowza Streaming Engine doesn't already ship with are included.
 
 ## Usage
 When a recording is finished, a temporary file named **[recording-name].upload** is created to track the recording and sort any data that may be needed to resume the file upload later if it's interrupted. AWS TransferManager uploads the recorded file, splitting it into a multipart upload if required. After the recorded file is uploaded, the temporary **[recording-name].upload** file is deleted.
