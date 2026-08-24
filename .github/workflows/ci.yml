@@ -1,11 +1,10 @@
-name: Release
+name: Build
 
 on:
-  release:
-    types: [published]
-
-permissions:
-  contents: write
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
 
 jobs:
   build:
@@ -18,15 +17,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-
-      - name: Verify VERSION matches release tag
-        run: |
-          VERSION=$(cat VERSION | tr -d '[:space:]')
-          TAG="${{ github.event.release.tag_name }}"
-          if [ "$VERSION" != "$TAG" ]; then
-            echo "::error::VERSION file ($VERSION) does not match release tag ($TAG)"
-            exit 1
-          fi
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -45,7 +35,14 @@ jobs:
       - name: Build & test
         run: ./gradlew build -PwseLibDir=./wse-lib --no-daemon
 
-      - name: Upload release assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" build/libs/*.jar --clobber
+      - name: Read version
+        id: version
+        run: echo "version=$(cat VERSION | tr -d '[:space:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Upload plugin JARs
+        uses: actions/upload-artifact@v7
+        with:
+          name: plugin-jars-${{ steps.version.outputs.version }}-${{ github.sha }}
+          path: build/libs/*.jar
+          retention-days: 7
+          if-no-files-found: error

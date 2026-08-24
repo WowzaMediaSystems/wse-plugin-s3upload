@@ -1,18 +1,9 @@
-import java.util.concurrent.Callable
-
 plugins {
     id 'java-library'
-    id 'com.gorylenko.gradle-git-properties' version '2.5.2'
 }
 
-group 'com.wowza.wms.plugin.s3upload'
-
-Closure<String> resolveReleaseVersion = {
-    if (!project.ext.has('gitProps')) return 'unspecified'
-    String tags = project.ext.gitProps['git.tags'] as String
-    if (!tags) return 'unspecified'
-    return tags.split(',').find { it.matches(/\d+\.\d+\.\d+/) } ?: 'unspecified'
-}
+group = 'com.wowza.wms.plugin.s3upload'
+version = file('VERSION').text.trim()
 
 java {
     toolchain {
@@ -39,48 +30,33 @@ dependencies {
     testCompileOnly fileTree(dir: "$wseLibDir", include: '*.jar')
 }
 
-gitProperties {
-    extProperty = 'gitProps'
-    dateFormat = "yyyy-MM-dd'T'HH:mm:ss'Z'"
-    dateFormatTimeZone = 'UTC'
-}
-
-generateGitProperties.outputs.upToDateWhen { false }
-
-sourceSets {
-    main {
-        java {
-            srcDirs = ['src/main/java', layout.buildDirectory.dir('generated/java')]
-        }
-    }
-}
-
 tasks.register('generateReleaseInfo') {
-    dependsOn generateGitProperties
-    group = "build"
-    def outputDir = layout.buildDirectory.dir('generated/java') as Provider<Directory>
-    def packageDotPath = "${project.group}"
-    def packagePath = packageDotPath.replaceAll('\\.', '/')
-    def projectVersion = "${project.version}"
-    def projectNameProp = "${projectName}"
+    group = 'build'
+    Provider<Directory> outputDir = layout.buildDirectory.dir('generated/java') as Provider<Directory>
+    outputs.dir outputDir.get().asFile.absolutePath
 
-    outputs.dir outputDir.get().dir(packagePath)
+    // Capture project values at configuration time -- accessing them inside
+    // doLast triggers a Gradle 10 deprecation (Task.project at execution time).
+    def packageDotPath = project.group.toString()
+    def releaseProjectName = projectName.toString()
+    def releaseVersion = project.version.toString()
+
     doLast {
+        def packagePath = packageDotPath.replaceAll('\\.', '/')
         Directory dir = outputDir.get().dir(packagePath)
         dir.asFile.mkdirs()
-        dir.file("ReleaseInfo.java").asFile.text =
+        dir.file('ReleaseInfo.java').asFile.text =
                 """|package $packageDotPath;
                    |public class ReleaseInfo {
-                   |    public static String getProject() { return "${projectNameProp}"; }
-                   |    public static String getVersion() { return "${resolveReleaseVersion()}"; }
-                   |    public static String getBuildComitDate() { return "${-> project.ext.gitProps['git.commit.time']}"; }
-                   |    public static String getBuildNumber() { return "${-> project.ext.gitProps['git.commit.id.abbrev']}"; }
+                   |    public static String getProject() { return "${releaseProjectName}"; }
+                   |    public static String getVersion() { return "${releaseVersion}"; }
                    |}""".stripMargin()
     }
 }
 
-clean.finalizedBy generateReleaseInfo
+sourceSets.main.java.srcDir generateReleaseInfo
 compileJava.dependsOn generateReleaseInfo
+clean.finalizedBy generateReleaseInfo
 
 // Copy runtime dependencies alongside the plugin jar, skipping any jar that
 // Wowza Streaming Engine already ships in its lib folder (matched by module
@@ -96,35 +72,21 @@ tasks.register('copyDeps', Sync) {
 }
 
 tasks.withType(Jar).configureEach {
-    dependsOn generateGitProperties, copyDeps
-    archiveVersion.set(project.provider({ resolveReleaseVersion() } as Callable<String>))
+    dependsOn copyDeps
     manifest {
         attributes(
-                'Gradle-Version'        : "Gradle ${gradle.gradleVersion}",
-                'Created-By'      		: "${System.properties['java.version']} (${System.properties['java.vendor']} ${System.properties['java.vm.version']})",
-                'Name'                  : "${project.name}",
-                'Build-Version'	        : "${-> resolveReleaseVersion()}",
-                'Build-Timestamp'    	: "${-> project.ext.gitProps['git.commit.time']}",
-                'Build-Revision'        : "${-> project.ext.gitProps['git.commit.id.abbrev']}",
+                'Gradle-Version' : "Gradle ${gradle.gradleVersion}",
+                'Created-By'     : "${System.properties['java.version']} (${System.properties['java.vendor']} ${System.properties['java.vm.version']})",
+                'Name'           : "${project.name}",
+                'Build-Version'  : "${project.version}"
         )
     }
-    exclude('git.properties')
     metaInf {
         from files('LICENSE.txt')
     }
     archiveBaseName = 'wse-plugin-' + projectName
 }
 
-tasks.named('jar').configure {
-    doFirst {
-        if (project.hasProperty('release') && resolveReleaseVersion() == 'unspecified') {
-            throw new GradleException(
-                    "Release build requires a *.*.* tag on HEAD; git.tags='${project.ext.gitProps?.get('git.tags') ?: ''}'"
-            )
-        }
-    }
-}
-
-test {
+tasks.named('test') {
     useJUnitPlatform()
 }
