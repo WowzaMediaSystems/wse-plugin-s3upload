@@ -1,0 +1,52 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+# GitHub recommends pinning actions to a commit SHA.
+# To get a newer version, you will need to update the SHA.
+# You can also reference a tag or branch, but the action may change without warning.
+
+name: Java CI
+
+on:
+  push:
+    tags: ['*.*.*']
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      discussions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: 17
+          distribution: 'temurin'
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Extract WSE libs from wowza-streaming-engine image
+        run: |
+          mkdir -p wse-lib
+          docker run --rm \
+            -v "$(pwd)/wse-lib:/output" \
+            --user "$(id -u):$(id -g)" \
+            --entrypoint sh \
+            wowza/wowza-streaming-engine:latest-slim \
+            -c 'cp /usr/local/WowzaStreamingEngine/lib.default/*.jar /output/'
+          echo "Extracted $(ls -1 wse-lib/*.jar | wc -l | xargs) WSE JAR files"
+      - name: Build Gradle
+        run: ./gradlew build -Prelease=true -PwseLibDir=./wse-lib --no-daemon
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          discussion_category_name: announcements
+          generate_release_notes: true
+          files: |
+            build/libs/*
